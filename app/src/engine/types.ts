@@ -81,6 +81,8 @@ export interface Hint {
   target?: string
   /** Tile to highlight. */
   tile?: string
+  /** Suggest turning the whole world this way (+1 = ⟲ / drag left, −1 = ⟳ / drag right). */
+  world?: 1 | -1
   /** The hint no longer applies once this returns true. */
   done?: (s: PuzzleState) => boolean
 }

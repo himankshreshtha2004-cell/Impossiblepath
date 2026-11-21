@@ -140,17 +140,22 @@ export function LevelView({ level }: { level: LevelDef }) {
   const tl = useRef({ reveal: useGame.getState().screen === 'title' || useGame.getState().quick ? 1 : 0, door: 0, exitT: -1, introDone: false, outro: 0 })
   const myRun = useRef(useGame.getState().runId)
   const flash = useRef<{ a: string; b: string; ca: number; cb: number; born: number } | null>(null)
+  const newRoute = useRef<{ key: string; until: number } | null>(null)
   const drag = useRef<{ id: string; kind: 'wheel' | 'grip'; center: V3; last: number; value: number; px: number; py: number; v0: number; vel: number } | null>(null)
 
   const world = useMemo(() => {
     const st = useGame.getState
-    const w = new World(level, {
+    // eslint-disable-next-line prefer-const
+    let w: World
+    w = new World(level, {
       step: () => sfx.step(),
       tick: () => sfx.tick(),
       snap: () => sfx.snap(),
       connect: (e) => {
         sfx.connect()
         flash.current = { a: e.a, b: e.b, ca: e.ca, cb: e.cb, born: performance.now() }
+        const far = w.visited.has(e.b) && !w.visited.has(e.a) ? e.a : e.b
+        newRoute.current = { key: far, until: performance.now() + 7000 }
       },
       press: () => sfx.press(),
       transform: () => sfx.transform(),
@@ -242,7 +247,6 @@ export function LevelView({ level }: { level: LevelDef }) {
   const beginDrag = (id: string, x: number, y: number, center: V3) => {
     const g = useGame.getState()
     if (!world.grab(id)) return false
-    g.clearHint()
     const m = world.map.get(id)!.motion!
     const kind = (m.kind === 'rotate' ? 'wheel' : 'grip') as 'wheel' | 'grip'
     drag.current = { id, kind, center, last: kind === 'wheel' ? angleAround(center, x, y) ?? 0 : 0, value: world.values[id], px: x, py: y, v0: world.values[id], vel: 0 }
@@ -357,7 +361,6 @@ export function LevelView({ level }: { level: LevelDef }) {
         }
         // nothing movable under the press: a sideways drag turns the whole world
         if (Math.abs(e.clientX - d.x) >= Math.abs(e.clientY - d.y) * 0.6 && world.grabView()) {
-          useGame.getState().clearHint()
           spin = { x0: d.x, v0: world.view, samples: [{ t: performance.now(), v: world.view }] }
           document.body.style.cursor = 'grabbing'
           window.addEventListener('pointermove', spinMove)
@@ -384,13 +387,13 @@ export function LevelView({ level }: { level: LevelDef }) {
       if (!k) return
       const ok = world.walkTo(k)
       tap.current = { key: k, kind: ok ? 'go' : 'no', born: performance.now() }
-      if (ok) g.clearHint()
     }
     const key = (e: KeyboardEvent) => {
       if (!playing()) return
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
-        if (world.turnView(e.key === 'ArrowLeft' ? -1 : 1)) useGame.getState().clearHint()
+        // ← turns the monument the same way as dragging the sky to the left
+        world.turnView(e.key === 'ArrowLeft' ? 1 : -1)
       }
     }
     window.addEventListener('keydown', key)
@@ -523,6 +526,15 @@ export function LevelView({ level }: { level: LevelDef }) {
       <Marker key={tap.current.born} kind={tap.current.kind} born={tap.current.born} pos={() => (tap.current.key ? world.liveCenter(tap.current.key) : null)} />
       {hint?.tile && <Marker kind="hint" born={0} pos={() => world.liveCenter(hint.tile!)} />}
       <JointFlash world={world} flash={flash} />
+      <Marker
+        kind="hint"
+        born={0}
+        pos={() => {
+          const r = newRoute.current
+          if (!r || performance.now() > r.until || world.visited.has(r.key) || !world.graph.nodes.has(r.key)) return null
+          return world.liveCenter(r.key)
+        }}
+      />
       <Lights frame={frame} world={world} />
     </group>
   )

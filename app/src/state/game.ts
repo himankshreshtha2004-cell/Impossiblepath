@@ -42,8 +42,14 @@ interface Game {
   phase: Phase
   paused: boolean
   settingsOpen: boolean
+  /** Guide mode: a step-by-step card that follows the player's progress. */
+  guide: boolean
   hint: Hint | null
+  hintStep: number
+  hintTotal: number
   hintAt: number
+  /** The guide opened by itself after the player stood still for a while. */
+  autoGuide: boolean
   caption: number
   go: (s: Screen) => void
   startLevel: (id: number) => void
@@ -53,8 +59,9 @@ interface Game {
   setPaused: (p: boolean) => void
   openSettings: (o: boolean) => void
   updateSettings: (p: Partial<Settings>) => void
-  showHint: () => void
+  showHint: (auto?: boolean) => void
   clearHint: () => void
+  refreshHint: () => void
   newGame: () => void
 }
 
@@ -74,18 +81,22 @@ export const useGame = create<Game>((set, get) => {
     phase: 'play',
     paused: false,
     settingsOpen: false,
+    guide: false,
     hint: null,
+    hintStep: 0,
+    hintTotal: 0,
     hintAt: 0,
+    autoGuide: false,
     caption: 0,
-    go: (screen) => set({ screen, paused: false, hint: null, ...(screen === 'title' ? { runId: get().runId + 1, phase: 'play' as Phase } : {}) }),
+    go: (screen) => set({ screen, paused: false, hint: null, guide: false, ...(screen === 'title' ? { runId: get().runId + 1, phase: 'play' as Phase } : {}) }),
     startLevel: (id) => {
       if (!BUILT[id]) return
       const s = { ...get().save, current: id }
       persist(s)
       const quick = get().screen === 'title' && get().levelId === id
-      set({ save: s, screen: 'play', levelId: id, runId: get().runId + 1, phase: 'intro', paused: false, hint: null, quick })
+      set({ save: s, screen: 'play', levelId: id, runId: get().runId + 1, phase: 'intro', paused: false, hint: null, guide: false, quick })
     },
-    restart: () => set({ runId: get().runId + 1, phase: 'intro', paused: false, hint: null, quick: false }),
+    restart: () => set({ runId: get().runId + 1, phase: 'intro', paused: false, hint: null, guide: false, quick: false }),
     setPhase: (phase) => set({ phase, ...(phase === 'play' ? { caption: get().caption + 1 } : {}) }),
     completeLevel: (id) => {
       const s = get().save
@@ -103,14 +114,20 @@ export const useGame = create<Game>((set, get) => {
       setVolumes(s.settings.music, s.settings.sfx)
       set({ save: s })
     },
-    showHint: () => {
-      const w = world
-      if (!w) return
-      const ps = w.puzzleState()
-      const h = w.level.hints.find((x) => !x.done || !x.done(ps)) ?? null
-      set({ hint: h, hintAt: performance.now() })
+    showHint: (auto = false) => {
+      set({ guide: true, autoGuide: auto, hintAt: performance.now() })
+      get().refreshHint()
     },
-    clearHint: () => set({ hint: null }),
+    clearHint: () => set({ guide: false, hint: null, autoGuide: false }),
+    refreshHint: () => {
+      const w = world
+      if (!w || !get().guide) return
+      const ps = w.puzzleState()
+      const hints = w.level.hints
+      let i = hints.findIndex((x) => !x.done || !x.done(ps))
+      if (i < 0) i = hints.length - 1
+      if (get().hint !== hints[i] || get().hintTotal !== hints.length) set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length })
+    },
     newGame: () => {
       const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1 }
       persist(s)

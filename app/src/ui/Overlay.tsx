@@ -149,38 +149,69 @@ function Hud() {
     const t = setTimeout(() => setCard(false), 3200)
     return () => clearTimeout(t)
   }, [st.caption])
+  // the guide follows the player: re-check which step applies several times a second
   useEffect(() => {
-    if (!st.hint) return
-    const t = setTimeout(() => useGame.getState().clearHint(), 9000)
-    return () => clearTimeout(t)
-  }, [st.hint, st.hintAt])
-  // a gentle, one-time nudge on the first two levels if nothing has happened for a while
+    if (!st.guide) return
+    const t = setInterval(() => useGame.getState().refreshHint(), 350)
+    return () => clearInterval(t)
+  }, [st.guide])
+  // if nothing has changed for a while, offer the guide by itself (once per attempt)
   useEffect(() => {
-    if (st.phase !== 'play' || st.levelId > 2) return
-    const t = setTimeout(() => {
+    if (st.phase !== 'play') return
+    let last = ''
+    let since = performance.now()
+    let offered = false
+    const t = setInterval(() => {
       const w = getWorld()
       const g = useGame.getState()
-      if (!w || g.hint || g.paused || g.phase !== 'play') return
-      const moved = Object.entries(w.values).some(([k, v]) => v !== w.map.get(k)!.motion!.start) || w.visited.size > 1
-      if (!moved) g.showHint()
-    }, 9000)
-    return () => clearTimeout(t)
+      if (!w || g.paused || g.phase !== 'play' || g.screen !== 'play') return (since = performance.now())
+      const sig = JSON.stringify([w.node, w.view, w.values, w.visited.size])
+      if (sig !== last) (last = sig), (since = performance.now())
+      if (!offered && !g.guide && performance.now() - since > 14000) {
+        offered = true
+        g.showHint(true)
+      }
+    }, 1000)
+    return () => clearInterval(t)
   }, [st.phase, st.levelId, st.runId])
   const playing = st.screen === 'play'
   if (!playing) return null
+  const turnWorld = (dir: 1 | -1) => {
+    initAudio()
+    getWorld()?.turnView(dir)
+  }
+  const pulse = (dir: 1 | -1) => (st.guide && st.hint?.world === dir ? ' pulse' : '')
   return (
     <>
       <button className="icon pause-btn" aria-label="Pause" onClick={() => (sfx.ui(), st.setPaused(true))}>
         <span className="bars" />
       </button>
-      <button className="icon hint-btn" aria-label="Hint" onClick={() => (initAudio(), sfx.ui(), st.hint ? st.clearHint() : st.showHint())}>
+      <button className={'hint-pill' + (st.guide ? ' on' : '')} aria-label="Hint" onClick={() => (initAudio(), sfx.ui(), st.guide ? st.clearHint() : st.showHint())}>
         <span className="lamp" />
+        <span>{st.guide ? 'Hide hints' : 'Hint'}</span>
       </button>
-      <div className={'level-card' + (card ? ' show' : '')}>
+      <button className={'icon world-btn left' + pulse(1)} aria-label="Turn the world left" title="Turn the world (or drag the sky)" onClick={() => turnWorld(1)}>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden><path d="M7 7.5A7 7 0 1 1 5 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M3.5 5.5 7 7.5 6.2 3.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      <button className={'icon world-btn right' + pulse(-1)} aria-label="Turn the world right" title="Turn the world (or drag the sky)" onClick={() => turnWorld(-1)}>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden><path d="M17 7.5A7 7 0 1 0 19 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M20.5 5.5 17 7.5 17.8 3.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      <div className={'level-card' + (card && !st.guide ? ' show' : '')}>
         <div className="eyebrow">{ROMAN[info.world]} · {pad2(info.id)}</div>
         <div className="lname">{info.name}</div>
       </div>
-      <div className={'hint-text' + (st.hint ? ' show' : '')}>{st.hint?.text}</div>
+      <div className={'guide' + (st.guide && st.hint ? ' show' : '')} role="status" aria-live="polite">
+        <div className="eyebrow">
+          {st.autoGuide ? 'A little help · ' : ''}Step {st.hintStep} of {st.hintTotal}
+        </div>
+        <div className="gtext">{st.hint?.text}</div>
+        <div className="dots">
+          {Array.from({ length: st.hintTotal }, (_, i) => (
+            <i key={i} className={i < st.hintStep - 1 ? 'done' : i === st.hintStep - 1 ? 'now' : ''} />
+          ))}
+        </div>
+        <button className="close" aria-label="Hide hints" onClick={() => st.clearHint()}>×</button>
+      </div>
       {st.phase === 'end' && <EndCard />}
     </>
   )
@@ -211,7 +242,7 @@ export function Overlay() {
     const k = (e: KeyboardEvent) => {
       const g = useGame.getState()
       if (e.key === 'Escape' && g.screen === 'play') g.settingsOpen ? g.openSettings(false) : g.setPaused(!g.paused)
-      if ((e.key === 'h' || e.key === 'H') && g.screen === 'play') g.hint ? g.clearHint() : g.showHint()
+      if ((e.key === 'h' || e.key === 'H') && g.screen === 'play') g.guide ? g.clearHint() : g.showHint()
     }
     window.addEventListener('keydown', k)
     const first = () => initAudio()

@@ -9,14 +9,14 @@ import { BOTTOM, box, column, door, finial, stairTile, stairs, tile, win } from 
 //  B  (medium) Ride the first tower to 180°. Its stair head (2.5,1,0) lines up on screen with
 //              the second tower's low walk (4.5,3,2) — two storeys up, two cells nearer. Cross.
 //  C  (hard)   Climb the second tower and ride it from 270° to 180°: its top (7,4,4.5) now meets
-//              the edge of a lift beside the first tower (3,0,0.5). Step on, raise the lift two
-//              storeys, go back to the FIRST tower's wheel and turn it to 90°… nothing — until you
-//              turn the WHOLE WORLD round to look from the far side (view 180°). From there the door's
-//              balcony (1.5,3,0) and the raised lift (2.5,2,1) line up along the new view diagonal.
+//              the edge of a lift beside the first tower (3,0,0.5). Step onto the lift, then turn
+//              the WHOLE WORLD round to look from the far side (view 180°): the first tower's door
+//              balcony (0,3,−1.5) and the lift's edge (3,0,1.5) line up along the new diagonal.
+//              (A longer route also works: raise the lift two storeys and turn the first tower to 90°.)
 //
-// The balcony can only be reached from the raised lift, the lift only from the second tower's
+// The balcony can only be reached from the lift, the lift only from the second tower's
 // top, and the second tower only from the first tower's stairs. So every phase matters, and
-// the first tower has to be turned twice.
+// the world has to be turned.
 
 export const level02: LevelDef = {
   id: 2,
@@ -139,14 +139,11 @@ export const level02: LevelDef = {
       id: 'L',
       origin: [3, 0, 1],
       motion: { kind: 'slide', axis: [0, 1, 0], stops: [0, 1, 2], start: 0, driver: { kind: 'grip', at: [0, -0.18, 0.5], face: 'S' } },
-      // a parapet closes the south and east edges; the lift is entered from the north, left by the west
-      tiles: [tile('m', 0, 0, 0, { sides: ['N', 'W'] })],
+      tiles: [tile('m', 0, 0, 0)],
       parts: [
         box([-0.5, -0.3, -0.5], [0.5, 0, 0.5], 'accent'),
         box([-0.42, -0.44, -0.42], [0.42, -0.3, 0.42], 'warm'),
         { kind: 'inlay', at: [0, 0, 0], size: 0.46, c: 'stone' },
-        box([-0.5, 0, 0.38], [0.5, 0.22, 0.5], 'warm'),
-        box([0.38, 0, -0.5], [0.5, 0.22, 0.38], 'warm'),
       ],
     },
     {
@@ -163,12 +160,26 @@ export const level02: LevelDef = {
     },
   ],
   hints: [
-    { text: 'Slide the bridge into place and step onto the first tower.', target: 'B', done: (s) => [...s.visited].some((k) => k.startsWith('T1:')) },
-    { text: 'Ride the first tower round until the top of its stairs meets the second tower.', target: 'T1', done: (s) => [...s.visited].some((k) => k.startsWith('T2:')) },
-    { text: 'Climb the second tower, then turn it. Its top can reach the lift.', target: 'T2', done: (s) => s.visited.has('L:m') },
-    { text: 'Raise the lift as high as it goes.', target: 'L', done: (s) => s.visited.has('T1:h1') || (s.node === 'L:m' && s.values.L === 2) },
-    { text: 'Turn the first tower so its door faces the lift…', target: 'T1', done: (s) => s.visited.has('T1:h1') || ((((s.values.T1 % 360) + 360) % 360) === 90) },
-    { text: '…then drag the sky to turn the whole world. From the far side, the balcony and the lift meet.', done: (s) => s.visited.has('T1:h1') },
+    { text: 'Drag the coral bridge toward the first tower (or use its little handle).', target: 'B', done: (s) => s.values.B === 1 || [...s.visited].some((k) => k.startsWith('T1:')) },
+    { text: 'Tap the first tower to step onto it.', tile: 'T1:c0', done: (s) => [...s.visited].some((k) => k.startsWith('T1:')) },
+    {
+      text: 'Turn the first tower until the top of its stairs points at the round tower.',
+      target: 'T1',
+      done: (s) => (((s.values.T1 % 360) + 360) % 360) === 180 || [...s.visited].some((k) => k.startsWith('T2:')),
+    },
+    { text: 'They meet. Tap the round tower to cross.', tile: 'T2:c', done: (s) => [...s.visited].some((k) => k.startsWith('T2:')) },
+    {
+      text: 'Turn the round tower (you ride with it) until its top landing touches the coral lift.',
+      target: 'T2',
+      done: (s) => (((s.values.T2 % 360) + 360) % 360) === 180 || s.visited.has('L:m'),
+    },
+    { text: 'Tap the lift to step onto it.', tile: 'L:m', done: (s) => s.visited.has('L:m') },
+    {
+      text: 'Turn the whole world half way round: tap ⟲ twice (or drag the sky a long way).',
+      world: 1,
+      done: (s) => s.view === 180 || s.visited.has('T1:h1'),
+    },
+    { text: 'From the far side the door balcony meets the lift. Tap it.', tile: 'T1:h1' },
   ],
   frame: { pad: 1.06 },
 }

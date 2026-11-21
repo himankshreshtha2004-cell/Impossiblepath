@@ -76,13 +76,13 @@ describe('level 02 — perspective joints at every world view and rotation state
   it('second tower top ↔ lift only at world 0°, T2=180°, lift low', () => {
     expect(liveStates(L, ['T2:tt', 'L:m'])).toEqual(['@view=0 T2=180 L=0'])
   })
-  it('door balcony ↔ lift only from the far side (world 180°), T1=90°, lift at the top', () => {
-    expect(liveStates(L, ['T1:h1', 'L:m'])).toEqual(['@view=180 T1=90 L=2'])
+  it('door balcony ↔ lift only from the far side (world 180°): T1=180° with the lift low, or T1=90° with it raised', () => {
+    expect(liveStates(L, ['T1:h1', 'L:m'])).toEqual(['@view=180 T1=180 L=0', '@view=180 T1=90 L=2'])
   })
 })
 
 describe('runtime world — level 01 played through the same API the mouse uses', () => {
-  it('turn the world, walk on, ride the tower, turn the world back, cross, push, turn, cross, exit', () => {
+  it('turn the world, walk on, ride the tower, turn the world back, cross, turn the tower back, cross, exit', () => {
     const L = BUILT[1]
     let exited = false
     let connects = 0
@@ -103,9 +103,8 @@ describe('runtime world — level 01 played through the same API the mouse uses'
     world(10)
     expect(w.view).toBe(0)
     expect(w.walkTo('P:m')).toBe(true)
-    run(9)
+    run(10)
     expect(w.node).toBe('P:m')
-    turn('P', 1.1)
     turn('T', -10)
     expect(w.walkTo('T:h')).toBe(true)
     run(5)
@@ -113,9 +112,16 @@ describe('runtime world — level 01 played through the same API the mouse uses'
   })
 })
 
+/** Index of the guide step the game would show for this state (same rule as the store). */
+function guideStep(L: LevelDef, w: World) {
+  const ps = w.puzzleState()
+  const i = L.hints.findIndex((h) => !h.done || !h.done(ps))
+  return i < 0 ? L.hints.length - 1 : i
+}
+
 describe('every built level', () => {
   for (const L of Object.values(BUILT)) {
-    it(`level ${L.id}: solvable, not trivial, needs world turning, repeated tower rotation and a moving platform`, () => {
+    it(`level ${L.id}: solvable, not trivial, short, and needs both world turning and tower turning`, () => {
       expect(trivial(L)).toBe(false)
       const sol = solve(L)!
       expect(sol).not.toBeNull()
@@ -125,7 +131,34 @@ describe('every built level', () => {
       const views = sol.moves.filter((m) => m.startsWith('set @view'))
       expect(turns.length).toBeGreaterThanOrEqual(2)
       expect(views.length).toBeGreaterThanOrEqual(1)
-      expect(slides.filter((m) => !m.startsWith('set @view')).length).toBeGreaterThanOrEqual(1)
+      expect(slides.length).toBeGreaterThanOrEqual(0)
+      // gentle early levels: a short route
+      if (L.id <= 2) expect(sol.moves.length).toBeLessThanOrEqual(8)
+    })
+    it(`level ${L.id}: the step-by-step guide follows the solution to the door`, () => {
+      expect(L.hints.length).toBeGreaterThanOrEqual(5)
+      const w = new World(L)
+      const run = (sec: number) => { for (let i = 0; i < sec * 60; i++) w.update(1 / 60) }
+      const sol = solve(L)!
+      let last = guideStep(L, w)
+      expect(last).toBe(0)
+      for (const [i, m] of sol.moves.entries()) {
+        const final = i === sol.moves.length - 1
+        if (final) expect(guideStep(L, w)).toBe(L.hints.length - 1) // the last step points at the door
+        const [verb, arg] = m.split(' ')
+        if (verb === 'set') {
+          const [id, v] = arg.split('=')
+          if (id === '@view') w.setView(Number(v))
+          else w.setStop(id, Number(v))
+        } else {
+          expect(w.walkTo(arg)).toBe(true)
+          run(12)
+        }
+        const now = guideStep(L, w)
+        expect(now).toBeGreaterThanOrEqual(last) // never goes backwards along the intended route
+        last = now
+      }
+      expect(w.done).toBe(true)
     })
     it(`level ${L.id}: no state can trap the traveller`, () => {
       const r = deadEnds(L)

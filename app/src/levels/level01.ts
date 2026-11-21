@@ -12,8 +12,8 @@ import { BOTTOM, box, column, door, finial, roof, stairTile, stairs, tile, win }
 //  B  (medium) Ride the tower round to 270°. The top of its stairs (2.5,1,0) now lines up on
 //              screen with the far walkway (4.5,3,2) — two storeys higher, two cells nearer.
 //              Cross.
-//  C  (hard)   Climb the far tower to a sliding platform. Push it one cell along its track,
-//              then turn the tower back to 0°. The stairs lose the far walkway, but the door's
+//  C  (hard)   Climb the far tower to the coral platform (already out on its track) and
+//              turn the tower back to 0°. The stairs lose the far walkway, but the door's
 //              balcony (1.5,3,0) now lines up with the platform's edge (2.5,4,1). Cross, exit.
 //
 // The balcony and door can't be reached from the tower's own stairs. The only way in is the
@@ -100,12 +100,13 @@ export const level01: LevelDef = {
       // THE FAR TOWER — the walkway the stairs reach, a stair up, and the sliding platform's track
       id: 'W',
       origin: [0, 0, 0],
-      tiles: [tile('w0', 5, 3, 2), stairTile('ws', 5, 3, 1, 'N'), tile('w1', 5, 4, 0), tile('w2', 4, 4, 0)],
+      tiles: [tile('w0', 5, 3, 2), stairTile('ws', 5, 3, 1, 'N'), tile('w1', 5, 4, 0), tile('w2', 4, 4, 0), tile('w3', 4, 4, 1)],
       parts: [
         column(5, 2, 3, 'stone'),
         stairs(5, 3, 1, 'N', 'warm'),
         column(5, 0, 4, 'stone'),
         column(4, 0, 4, 'warm'),
+        column(4, 1, 4, 'warm'),
         box([2.62, 3.5, -0.46], [2.72, 3.58, 1.46], 'accent'),
         box([3.28, 3.5, -0.46], [3.38, 3.58, 1.46], 'accent'),
         box([3.38, 3.45, -0.2], [3.5, 3.62, 0.2], 'warm'),
@@ -124,7 +125,8 @@ export const level01: LevelDef = {
       // the sliding platform at the top of the far tower
       id: 'P',
       origin: [3, 4, 0],
-      motion: { kind: 'slide', axis: [0, 0, 1], stops: [0, 1], start: 0, driver: { kind: 'grip', at: [0, -0.15, 0.5], face: 'S' } },
+      // starts already pushed out along its track (easier); it can still be slid back
+      motion: { kind: 'slide', axis: [0, 0, 1], stops: [0, 1], start: 1, driver: { kind: 'grip', at: [0, -0.15, 0.5], face: 'S' } },
       tiles: [tile('m', 0, 0, 0)],
       parts: [
         box([-0.5, -0.3, -0.5], [0.5, 0, 0.5], 'accent'),
@@ -147,16 +149,32 @@ export const level01: LevelDef = {
   ],
   hints: [
     {
-      text: 'Drag across the sky to turn the whole world. Watch where your island meets the tower.',
+      text: 'Turn the whole world a quarter turn: drag the sky to the left, or tap ⟲ at the bottom left.',
+      world: 1,
+      done: (s) => s.view === 90 || [...s.visited].some((k) => k.startsWith('T:')),
+    },
+    {
+      text: 'From this side your island meets the tower. Tap the tower to walk across.',
+      tile: 'T:c0',
       done: (s) => [...s.visited].some((k) => k.startsWith('T:')),
     },
     {
-      text: 'Stand on the tower and turn it with its wheel. Then turn the world back to see where the top of the stairs meets.',
+      text: 'Now turn the tower itself: drag its coral wheel (or the tower) round one quarter turn.',
       target: 'T',
-      done: (s) => s.visited.has('W:w0'),
+      done: (s) => (((s.values.T % 360) + 360) % 360) === 270 || s.visited.has('W:w0'),
     },
-    { text: 'Climb to the sliding platform and push it along its track.', target: 'P', done: (s) => s.visited.has('P:m') && s.values.P === 1 },
-    { text: 'Now turn the tower again. Look for the balcony by the door.', target: 'T', done: (s) => s.visited.has('T:h') },
+    {
+      text: 'Turn the world back: drag the sky to the right, or tap ⟳ at the bottom right.',
+      world: -1,
+      done: (s) => (s.view === 0 && (((s.values.T % 360) + 360) % 360) === 270) || s.visited.has('W:w0'),
+    },
+    { text: 'The top of the stairs meets the far walkway. Tap it to cross.', tile: 'W:w0', done: (s) => s.visited.has('W:w0') },
+    {
+      text: 'Turn the tower back one quarter turn. Its door balcony will meet the coral platform at the top of this tower.',
+      target: 'T',
+      done: (s) => ((((s.values.T % 360) + 360) % 360) === 0 && s.view === 0 && s.values.P === 1) || s.visited.has('T:h'),
+    },
+    { text: 'Climb up over the coral platform and tap the balcony to reach the door.', tile: 'T:h' },
   ],
   frame: { pad: 1.08 },
 }

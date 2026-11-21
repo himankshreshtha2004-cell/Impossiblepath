@@ -39,6 +39,18 @@ directory `dist`.
   (0°, 90°, 180°, 270°), with a little momentum on release. A world turn never changes any
   tower's or platform's own state.
 
+## Hints
+
+Every level has a step-by-step guide. **Hint** (top right, or `H`) opens it.
+
+* It shows "Step N of M" and moves on by itself as you play.
+* It pulses the wheel or platform to use, rings the tile to tap, and pulses the ⟲ / ⟳ button to
+  press.
+* If nothing changes for about 14 seconds, it opens on its own.
+* When a new impossible path forms, the tile across it keeps a soft ring until you visit it.
+* The ⟲ ⟳ buttons in the bottom corners turn the world a quarter turn (same as dragging the sky).
+* The tests replay each level's solution and check that the guide follows it to the door.
+
 ## How the impossible paths work
 
 The camera always looks down the (−1, −1, −1) diagonal, which is a true isometric projection. Every
@@ -91,17 +103,17 @@ Every level has three phases: an easy discovery, a medium alignment (turn a whol
 paths line up on screen), and a hard combined puzzle. The hard phase moves a platform, walks
 somewhere else, and turns a tower again so the first joint breaks and a new one forms.
 
-* **Level 01:**
+* **Level 01 (7 moves):**
   * Turn the world to 90°: the low start island meets the tower's walk. Walk on.
   * Ride the tower to 270°, then turn the world back to 0°: the stair head meets the far
     walkway. Cross.
-  * Push the top platform and turn the tower back to 0°: the door balcony meets it. Exit.
-* **Level 02:**
+  * Turn the tower back to 0°: the door balcony meets the coral platform. Exit.
+* **Level 02 (8 moves):**
   * Slide the bridge to reach the first tower.
   * Ride the first tower to 180° to meet the second tower. Cross.
   * Ride the second tower to 180° so its top meets the lift. Cross.
-  * Raise the lift two storeys, and turn the first tower to 90°.
   * Turn the world to 180° to look from the far side: the balcony meets the lift. Exit.
+  * A longer route also works: raise the lift and turn the first tower to 90°.
 
 `scripts/analyze.ts` prints every joint at every rotation state and the shortest solution:
 `npx vite-node scripts/analyze.ts 1`.

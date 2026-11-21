@@ -128,6 +128,13 @@ async def main():
         await scr('e2e_02_level01')
 
         # ------------------------------------------------------------------ level 01
+        # The guide: Hint opens step 1, which points at turning the world
+        await pg.get_by_role('button', name='Hint', exact=True).click()
+        await pg.wait_for_timeout(900)
+        check('guide opens at step 1 of the level', await ev(f"{G}.guide && {G}.hintStep === 1"), await ev(f"{G}.hintStep"))
+        check('step 1 says to turn the whole world and the ⟲ button pulses', 'Turn the whole world' in (await ev(f"{G}.hint.text")) and await pg.locator('.world-btn.left.pulse').count() == 1)
+        await scr('e2e_02b_guide')
+
         # Phase A — turn the WHOLE WORLD by dragging the sky
         await click_tile('T:p2')
         await pg.wait_for_timeout(1200)
@@ -138,6 +145,8 @@ async def main():
         check('L1 A: dragging the sky turns the whole world to a new view (90°)', ang(await ev(f"{W}.view")) == 90, await ev(f"{W}.view"))
         check('L1 A: tower and platform states unchanged by the world turn', await ev(f"JSON.stringify({W}.values)") == towers_before)
         check('L1 A: from this side the island meets the tower walk (perspective edge live)', await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('S:s1'))"))
+        await pg.wait_for_timeout(500)
+        check('guide moved on to step 2 by itself', await ev(f"{G}.hintStep") == 2, await ev(f"{G}.hintStep"))
         check('L1 A: traveller walks across the impossible joint onto the tower', await walk('T:c0'), await ev(f"{W}.node"))
         await scr('e2e_03b_on_tower')
 
@@ -154,14 +163,13 @@ async def main():
         await scr('e2e_05_crossed')
 
         # Phase C — move the platform, turn the tower again, second impossible joint
-        check('L1 C: climbs to the sliding platform', await walk('P:m'))
-        await slide_grip('P', [0, 0, 1], 1)
-        check('L1 C: platform pushed along its track (rides it)', await ev(f"{W}.values.P") == 1 and await ev(f"{W}.node") == 'P:m')
+        check('L1 C: climbs to the coral platform (already out on its track)', await walk('P:m') and await ev(f"{W}.values.P") == 1)
         check('L1 C: balcony not reachable yet', not await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T:h'))"))
         await turn_wheel('T', 90)
         check('L1 C: tower turned back to 0°', ang(await ev(f"{W}.values.T")) == 0, await ev(f"{W}.values.T"))
         check('L1 C: previous joint gone, new joint to the door balcony', await ev(f"{W}.graph.edges.filter(e => e.kind === 'illusion').map(e => [e.a,e.b].sort().join()).join() === 'P:m,T:h'"))
         await scr('e2e_06_second_joint')
+        check('guide is on its last step (the door)', await ev(f"{G}.hintStep === {G}.hintTotal"), await ev(f"[{G}.hintStep, {G}.hintTotal]"))
         await click_tile('T:h')
         ok = await wait_for(f"{G}.phase === 'exit'", 30)
         check('L1 C: crosses to the balcony and through the door', ok)
@@ -191,14 +199,14 @@ async def main():
         # press on the part of the lift in view (the second tower's landing overlaps its east half)
         hit = await ev(f"(() => {{ const c = {W}.liveCenter('L:m'); const p = __ip.toScreen([c[0] - 0.3, c[1], c[2] - 0.05]); return __ip.hitAt(p[0], p[1]) }})()")
         check('L2 C: the lift is visible and grabbable where pressed', hit and hit['struct'] == 'L', hit and hit['struct'])
-        await drag_body('L:m', [0, 1, 0], 2, offset=(-0.3, 0, -0.05))
-        check('L2 C: lift raised two storeys by dragging the lift itself (rides it)', await ev(f"{W}.values.L") == 2 and await ev(f"{W}.node") == 'L:m', await ev(f"{W}.values.L"))
-        await turn_wheel('T1', -90)
-        check('L2 C: first tower turned to 90°', ang(await ev(f"{W}.values.T1")) == 90)
-        check('L2 C: no route to the balcony from this side', not await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T1:h1'))"))
-        await spin_world(-215, at=(1180, 300))
-        await spin_world(-215, at=(1180, 300))
-        check('L2 C: world turned round to the far side (180°)', ang(await ev(f"{W}.view")) == 180, await ev(f"{W}.view"))
+        # the easier route: straight from the lift, turn the world round with the ⟲ button
+        check('L2 C: no route to the balcony from the front', not await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T1:h1'))"))
+        await pg.locator('.world-btn.left').click()
+        await pg.wait_for_timeout(1200)
+        await pg.locator('.world-btn.left').click()
+        await pg.wait_for_timeout(1600)
+        check('L2 C: ⟲ button twice turns the world to the far side (180°)', ang(await ev(f"{W}.view")) == 180, await ev(f"{W}.view"))
+        check('L2 C: tower and lift states unchanged by the world turn', ang(await ev(f"{W}.values.T1")) == 180 and await ev(f"{W}.values.L") == 0)
         check('L2 C: from the far side the balcony meets the lift', await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T1:h1'))"))
         await scr('e2e_11_final_joint')
         await click_tile('T1:h1')
@@ -233,10 +241,7 @@ async def main():
         await scr('e2e_14_pause')
         check('pause menu opens', await pg.get_by_role('button', name='Resume').count() == 1)
         await pg.get_by_role('button', name='Resume').click()
-        await pg.get_by_role('button', name='Hint').click()
-        await pg.wait_for_timeout(900)
-        await scr('e2e_15_hint')
-        check('hint appears', bool(await ev(f"{G}.hint && {G}.hint.text")))
+        await scr('e2e_15_replay')
 
         await pg.get_by_role('button', name='Resume').count()
 
@@ -258,7 +263,9 @@ async def main():
             await mp.wait_for_timeout(28)
         await mp.wait_for_timeout(220)
         await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-        await mp.wait_for_timeout(1600)
+        t0 = time.time()
+        while time.time() - t0 < 20 and not await mp.evaluate(f"{W}.settledView() !== null"):
+            await mp.wait_for_timeout(250)
         v = await mp.evaluate(f"{W}.view")
         check('phone: a touch swipe across the sky turns the world', ang(v) in (90, 180), v)
         await mp.evaluate(f"{W}.setView(90)")
