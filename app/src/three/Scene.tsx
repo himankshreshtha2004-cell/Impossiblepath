@@ -35,6 +35,7 @@ function computeFrame(level: LevelDef): Frame {
   const minY = Math.min(...tilesY)
   const floor = minY - 2.4
   for (const s of level.structures) {
+    if (s.id.startsWith('sc')) continue // distant scenery doesn't set the framing
     const stops = s.motion ? s.motion.stops : [0]
     for (const st of stops) {
       const v = s.motion ? { ...vals, [s.id]: st } : vals
@@ -290,14 +291,18 @@ export function LevelView({ level }: { level: LevelDef }) {
     return true
   }
 
-  /** Pressing a wheel or grip grabs it at once (unless solid architecture is in front of it). */
+  /**
+   * Pressing a wheel or grip arms it; it is grabbed once the pointer actually moves (a press
+   * without movement stays a tap, so an invisible grab zone can never swallow a tap to walk).
+   */
+  const pendingHandle = useRef<{ id: string; x: number; y: number; center: V3 } | null>(null)
   const onGrab = (id: string, e: ThreeEvent<PointerEvent>) => {
     const g = useGame.getState()
     if (g.screen !== 'play' || g.paused || g.phase !== 'play') return
     raycaster.setFromCamera(ndc(e.nativeEvent.clientX, e.nativeEvent.clientY), camera)
     const front = raycaster.intersectObjects(archMeshes(), false)[0]
     if (front && front.distance < e.distance - 0.05) return
-    beginDrag(id, e.nativeEvent.clientX, e.nativeEvent.clientY, handleWorld(id))
+    pendingHandle.current = { id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, center: handleWorld(id) }
   }
 
   useEffect(() => {
@@ -342,9 +347,16 @@ export function LevelView({ level }: { level: LevelDef }) {
     const pd = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY, id: null, center: null }
       if (drag.current || spin || !playing()) return
-      // pressing on movable architecture: a drag turns/slides it, a tap still walks
-      const h = hitAt(e.clientX, e.clientY)
-      const id = h ? movableOf(h.object) : null
+      // pressing on movable architecture: a drag turns/slides it, a tap still walks.
+      // Be forgiving: a movable piece just behind a slim post or arch still counts.
+      raycaster.setFromCamera(ndc(e.clientX, e.clientY), camera)
+      const hits = raycaster.intersectObjects(archMeshes(), false)
+      let h = hits[0]
+      let id = h ? movableOf(h.object) : null
+      if (h && !id) {
+        const behind = hits.find((x) => x.distance < hits[0].distance + 0.9 && movableOf(x.object))
+        if (behind) (h = behind), (id = movableOf(behind.object))
+      }
       if (id && h) {
         const T = worldTransform(level, world.values, id, world.map)
         down.id = id
@@ -352,6 +364,13 @@ export function LevelView({ level }: { level: LevelDef }) {
       }
     }
     const pm = (e: PointerEvent) => {
+      const ph = pendingHandle.current
+      if (ph && !drag.current && !spin && playing() && Math.hypot(e.clientX - ph.x, e.clientY - ph.y) > 6) {
+        pendingHandle.current = null
+        down = null
+        beginDrag(ph.id, ph.x, ph.y, ph.center)
+        return
+      }
       if (down && !drag.current && !spin && playing() && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
         const d = down
         down = null
@@ -379,6 +398,7 @@ export function LevelView({ level }: { level: LevelDef }) {
       }
     }
     const pu = (e: PointerEvent) => {
+      pendingHandle.current = null
       const g = useGame.getState()
       if (!down || drag.current || spin || !playing()) return (down = null)
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return (down = null)

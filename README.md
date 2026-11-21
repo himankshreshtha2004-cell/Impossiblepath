@@ -12,10 +12,102 @@ the character and the sound are generated in code, so there are no asset files t
 | | |
 |---|---|
 | Engine (iso camera, nav graph, perspective links, rotate / slide / switch mechanisms, riding, pathfinding, solver) | done |
-| Level 01 — The First Bridge (one whole turning tower, two impossible joints) | playable, tested |
-| Level 02 — Three Towers (two turning towers + a lift, three impossible joints) | playable, tested |
-| Levels 03–50 | catalogued in the chapter map, still being built |
+| Levels 01–02 | hand-made, playable, tested |
+| Levels 03–50 | built by the level designer, playable, tested |
 | Title, chapters map (50 levels, 5 worlds, 3 tiers), pause, settings, hints, save, sound | done |
+
+## The 50 levels
+
+Difficulty rises gently: about 5–6 moves in World I, 7–9 in II, 8–9 in III, 10–12 in IV and
+10–14 in V. Every level combines turning the world with turning towers. Later worlds add bridges,
+lifts and towers you call to you from elsewhere.
+
+| # | Level | World | Moves | Mechanics |
+|---|---|---|---|---|
+| 01 | The First Bridge | I The Beginning | 7 | world turn · tower turn (hand-made) |
+| 02 | Three Towers | I The Beginning | 6 | bridge · tower turn · world turn (hand-made) |
+| 03 | The Turning Stair | I The Beginning | 6 | call a tower · world turn |
+| 04 | The Hidden Door | I The Beginning | 6 | world turn · tower turn |
+| 05 | Across the Void | I The Beginning | 5 | bridge · world turn · tower turn |
+| 06 | The Spiral | I The Beginning | 5 | world turn · call a tower |
+| 07 | Two Worlds | I The Beginning | 5 | bridge · tower turn · world turn |
+| 08 | The Rising Path | I The Beginning | 6 | world turn · tower turn |
+| 09 | The Courtyard | I The Beginning | 6 | call a tower · world turn |
+| 10 | The Fold | I The Beginning | 5 | world turn · tower turn |
+| 11 | The Crossroads | II The Floating Gardens | 8 | bridge · tower turn · world turn · lift |
+| 12 | The Forgotten Arch | II The Floating Gardens | 8 | call a tower · world turn · tower turn |
+| 13 | The Floating Gate | II The Floating Gardens | 7 | lift · tower turn · world turn |
+| 14 | The Clock Tower | II The Floating Gardens | 7 | world turn · tower turn · bridge |
+| 15 | The First Illusion | II The Floating Gardens | 7 | bridge · call a tower · world turn |
+| 16 | The Impossible Garden | II The Floating Gardens | 9 | world turn · tower turn · lift |
+| 17 | Stairway Without End | II The Floating Gardens | 9 | bridge · tower turn · world turn · lift |
+| 18 | The Mirror Path | II The Floating Gardens | 8 | call a tower · world turn · tower turn |
+| 19 | Twisting Towers | II The Floating Gardens | 7 | lift · tower turn · world turn |
+| 20 | The Secret Courtyard | II The Floating Gardens | 7 | world turn · tower turn · bridge |
+| 21 | The Water Temple | III The Forgotten Towers | 8 | world turn · tower + world · bridge · tower turn |
+| 22 | The Suspended City | III The Forgotten Towers | 9 | call a tower · tower + world · world turn |
+| 23 | Turning Horizons | III The Forgotten Towers | 8 | lift · tower + world · bridge |
+| 24 | The Inverted Bridge | III The Forgotten Towers | 8 | bridge · tower + world · lift |
+| 25 | The Sliding Palace | III The Forgotten Towers | 8 | bridge · tower + world · lift |
+| 26 | The Lost Staircase | III The Forgotten Towers | 9 | world turn · tower turn · call a tower |
+| 27 | Gravity's Edge | III The Forgotten Towers | 8 | world turn · tower + world · bridge · tower turn |
+| 28 | The Observatory | III The Forgotten Towers | 9 | call a tower · tower + world · world turn |
+| 29 | The Unfolding Tower | III The Forgotten Towers | 8 | lift · tower + world · bridge |
+| 30 | The Broken Circle | III The Forgotten Towers | 8 | bridge · tower + world · lift |
+| 31 | The Double Illusion | IV The Illusions | 11 | world turn · tower + world · call a tower · bridge |
+| 32 | The Stair Garden | IV The Illusions | 10 | lift · tower turn · tower + world · world turn |
+| 33 | The Vanishing Path | IV The Illusions | 11 | bridge · call a tower · tower + world · lift |
+| 34 | The Inner City | IV The Illusions | 11 | call a tower · lift · tower + world · world turn |
+| 35 | The Endless Passage | IV The Illusions | 10 | call a tower · lift · tower + world · world turn |
+| 36 | The Paradox Tower | IV The Illusions | 11 | world turn · tower + world · call a tower · bridge |
+| 37 | The Impossible Labyrinth | IV The Illusions | 10 | lift · tower turn · tower + world · world turn |
+| 38 | The Infinite Stair | IV The Illusions | 11 | bridge · call a tower · tower + world · lift |
+| 39 | Shifting Dimensions | IV The Illusions | 12 | call a tower · lift · tower + world · world turn |
+| 40 | The Clockwork World | IV The Illusions | 12 | call a tower · lift · tower + world · world turn |
+| 41 | Four Directions | V The Infinite | 14 | world turn · tower + world · call a tower · bridge |
+| 42 | The Folded Kingdom | V The Infinite | 12 | lift · tower + world · call a tower · world turn |
+| 43 | The Fractured City | V The Infinite | 12 | bridge · tower turn · tower + world · call a tower · world turn |
+| 44 | Beyond Gravity | V The Infinite | 14 | call a tower · tower + world · lift · tower turn · world turn |
+| 45 | The Celestial Machine | V The Infinite | 11 | world turn · tower + world · call a tower |
+| 46 | The Parallel Towers | V The Infinite | 14 | world turn · tower + world · call a tower · bridge |
+| 47 | The Silent Maze | V The Infinite | 11 | lift · tower + world · call a tower · world turn |
+| 48 | The Impossible Castle | V The Infinite | 10 | bridge · tower turn · tower + world · call a tower · world turn |
+| 49 | The Last Stairway | V The Infinite | 11 | world turn · tower + world · call a tower |
+| 50 | The Infinite Path | V The Infinite | 11 | world turn · tower + world · call a tower |
+
+## Level designer
+
+`app/scripts/generate.ts` builds levels 03–50 (`npx vite-node scripts/generate.ts 3 50`, which
+writes `src/levels/generated.json`).
+
+Each level is a chain of "hops" from the start island to a door:
+
+* **slide:** slide a coral bridge into the gap.
+* **view:** turn the world.
+* **ride:** turn the tower you stand on.
+* **rideView:** turn the tower and the world.
+* **remote:** turn a tower you're not on until it meets you.
+* **lift:** ride a lift up.
+
+Pieces are islands with side buildings, four shapes of turning tower, bridges, lifts and a door
+tower. They're placed so each joint exists only in its intended state, with clearance so turning
+towers never sweep through anything. A candidate is kept only if it passes all of these:
+
+* the solver solves it, and the shortest solution uses a world turn and a tower turn within the
+  world's move budget;
+* no state can trap the traveller;
+* a sightline test shows the traveller and the next tile at every step of the solution.
+
+The guide for each level is written from its actual solution, and the tests replay that solution
+through the guide.
+
+Checks run on the final 50 levels:
+
+* `npm test` (160 tests): every level is solvable and not trivial, has no trap states, and its
+  guide follows its solution to the door.
+* `npx vite-node scripts/generate.ts verify`: sightlines and visible controls for every level.
+* `qa/e2e_levels.py`: plays levels in a real browser using only the guide. 21 of the generated
+  levels across all five worlds were played this way, plus Levels 01–02 in `qa/e2e.py`.
 
 ## Run it
 

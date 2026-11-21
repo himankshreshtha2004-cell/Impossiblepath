@@ -233,14 +233,25 @@ function Hud() {
 function EndCard() {
   const st = useGame()
   const next = LEVELS[st.levelId]
+  if (!next) {
+    // after level 50
+    return (
+      <div className="end fade-in">
+        <div className="eyebrow">The end of the path</div>
+        <p>You have walked the Impossible Path.</p>
+        <div className="row-btns">
+          <button onClick={() => st.go('chapters')}>Chapters</button>
+          <button onClick={() => st.startLevel(1)}>Walk it again</button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="end fade-in">
       <div className="eyebrow">The path continues</div>
-      {next && (
-        <p>
-          {pad2(next.id)} · {next.name} is still being built.
-        </p>
-      )}
+      <p>
+        {pad2(next.id)} · {next.name} is still being built.
+      </p>
       <div className="row-btns">
         <button onClick={() => st.go('chapters')}>Chapters</button>
         <button onClick={() => st.startLevel(1)}>Replay from the start</button>

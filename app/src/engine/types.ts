@@ -113,6 +113,8 @@ export interface LevelDef {
   /** World views the player may turn to (default all four) and the one the level opens at. */
   views?: number[]
   startView?: number
+  /** One-line summary of the mechanics this level uses (shown in the chapter map). */
+  mechanic?: string
   /** Optional framing tweaks. */
   frame?: { pad?: number; shiftY?: number; zoom?: number }
   /** Decorative clouds etc. */

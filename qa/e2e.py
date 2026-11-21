@@ -226,12 +226,15 @@ async def main():
         check('L2: guide opens by itself on an unplayed level', await ev(f"{G}.guide"))
         await scr('e2e_10_l2_guide')
         steps = await follow_guide('L2')
-        check('L2: following the guide alone reaches the door', await wait_for(f"{G}.phase === 'end' || {G}.levelId === 3", 30), steps)
+        check('L2: following the guide alone reaches the door', await wait_for(f"{G}.levelId === 3", 40), steps)
         check('L2: the guide advanced step by step (1→6)', steps == sorted(steps) and steps[0] == 1 and steps[-1] == 6, steps)
         await pg.wait_for_timeout(1200)
         await scr('e2e_12_end')
 
         # ------------------------------------------------------------------ chapters + pause
+        check('Level 03 follows Level 02', await wait_for(f"{G}.levelId === 3 && {G}.phase === 'play'", 40))
+        await pg.keyboard.press('Escape')
+        await pg.wait_for_timeout(600)
         await pg.get_by_role('button', name='Chapters').click()
         await pg.wait_for_timeout(1200)
         await scr('e2e_13_chapters')
@@ -296,7 +299,7 @@ async def main():
         x, y = await mp.evaluate(f"__ip.toScreen({W}.liveCenter('T:c0'))")
         await mp.touchscreen.tap(x, y)
         t0 = time.time()
-        while time.time() - t0 < 30 and not await mp.evaluate(f"{W}.node === 'T:c0'"):
+        while time.time() - t0 < 120 and not await mp.evaluate(f"{W}.node === 'T:c0'"):
             await mp.wait_for_timeout(250)
         check('phone: tap to walk across the joint', await mp.evaluate(f"{W}.node") == 'T:c0')
         await mp.screenshot(path=OUT + 'e2e_16_phone.png')

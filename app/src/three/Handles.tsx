@@ -79,7 +79,7 @@ export function Handle(p: Props) {
           <torusGeometry args={[d.r + 0.1, 0.03, 8, 64]} />
         </mesh>
         <mesh material={HIT} {...events} userData={{ handle: p.id }}>
-          <cylinderGeometry args={[d.r + 0.45, d.r + 0.45, 0.6, 32]} />
+          <cylinderGeometry args={[d.r + 0.25, d.r + 0.25, 0.4, 32]} />
         </mesh>
       </group>
     )
@@ -98,7 +98,7 @@ export function Handle(p: Props) {
         <ringGeometry args={[0.32, 0.38, 32]} />
       </mesh>
       <mesh position={[n[0] * 0.15, 0, n[2] * 0.15]} material={HIT} {...events} userData={{ handle: p.id }}>
-        <boxGeometry args={tx ? [1.0, 0.7, 0.4] : [0.4, 0.7, 1.0]} />
+        <boxGeometry args={tx ? [0.62, 0.36, 0.3] : [0.3, 0.36, 0.62]} />
       </mesh>
     </group>
   )

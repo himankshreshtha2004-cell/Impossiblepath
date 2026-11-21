@@ -71,7 +71,7 @@ const rows: [string, string][] = [
 
 export const LEVELS: LevelInfo[] = rows.map(([name, mechanic], i) => {
   const id = i + 1
-  return { id, name, mechanic, world: Math.ceil(id / 10), tier: id <= 15 ? 'Easy' : id <= 35 ? 'Medium' : 'Hard', built: !!BUILT[id] }
+  return { id, name, mechanic: BUILT[id]?.mechanic ?? mechanic, world: Math.ceil(id / 10), tier: id <= 15 ? 'Easy' : id <= 35 ? 'Medium' : 'Hard', built: !!BUILT[id] }
 })
 
 export const levelInfo = (id: number) => LEVELS[id - 1]
