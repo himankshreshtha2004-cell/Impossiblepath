@@ -1,22 +1,18 @@
 import type { LevelDef } from '../engine/types'
-import { BOTTOM, box, column, door, finial, stairTile, stairs, tile, win } from './kit'
+import { BOTTOM, box, column, door, finial, roof, stairTile, stairs, tile, win } from './kit'
 
-// LEVEL 02 — THREE TOWERS
+// LEVEL 02 — THREE TOWERS  (gentle: one straight route, six moves)
 //
-// Two towers turn; a lift rises between them.
+//  1. Slide the coral bridge in and step onto the first tower.
+//  2. Turn the first tower (you ride it) to 180°: the top of its stairs (2.5,1,0) lines up on
+//     screen with the round tower's walk (4.5,3,2). Cross and climb the round tower.
+//  3. Turn the WHOLE WORLD a quarter turn (view 90°). From that side the round tower's top
+//     (9.5,4,2) runs straight into the door tower's balcony (6.5,1,5), three storeys lower and
+//     three cells nearer, along the new view diagonal (1,1,−1). Cross to the door.
 //
-//  A  (easy)   Slide the bridge in and step onto the first tower (it rests at 90°).
-//  B  (medium) Ride the first tower to 180°. Its stair head (2.5,1,0) lines up on screen with
-//              the second tower's low walk (4.5,3,2) — two storeys up, two cells nearer. Cross.
-//  C  (hard)   Climb the second tower and ride it from 270° to 180°: its top (7,4,4.5) now meets
-//              the edge of a lift beside the first tower (3,0,0.5). Step onto the lift, then turn
-//              the WHOLE WORLD round to look from the far side (view 180°): the first tower's door
-//              balcony (0,3,−1.5) and the lift's edge (3,0,1.5) line up along the new diagonal.
-//              (A longer route also works: raise the lift two storeys and turn the first tower to 90°.)
-//
-// The balcony can only be reached from the lift, the lift only from the second tower's
-// top, and the second tower only from the first tower's stairs. So every phase matters, and
-// the world has to be turned.
+// The round tower and the door tower stand still; only the first tower and the world turn.
+
+const FIXED = (deg: number) => ({ kind: 'rotate' as const, stops: [deg], start: deg, driver: { kind: 'flag' as const, flag: 'never', on: deg, off: deg } })
 
 export const level02: LevelDef = {
   id: 2,
@@ -25,8 +21,7 @@ export const level02: LevelDef = {
   start: 'S:s0',
   links: [
     ['T1:a', 'T2:s2'],
-    ['T2:tt', 'L:m'],
-    ['T1:h1', 'L:m'],
+    ['T2:tt', 'D:d'],
   ],
   structures: [
     {
@@ -60,7 +55,7 @@ export const level02: LevelDef = {
     },
     { id: 'Brail', origin: [0, 0, 0], tiles: [], parts: [box([-1.55, -0.56, -3.14], [0.55, -0.44, -2.86], 'stone')] },
     {
-      // FIRST TOWER — walk, stairs, landing, pier, balcony and door turn together
+      // FIRST TOWER — walk, stairs, landing and pier turn together
       id: 'T1',
       origin: [0, 0, 0],
       motion: { kind: 'rotate', stops: [0, 90, 180, 270], start: 90, driver: { kind: 'wheel', at: [0, -1.9, 0], r: 0.98 } },
@@ -70,7 +65,6 @@ export const level02: LevelDef = {
         tile('c0', 0, 0, 0, { sides: ['E', 'W'] }),
         stairTile('sw', -1, 0, 0, 'W'),
         tile('a', -2, 1, 0, { sides: ['E', 'W'] }),
-        tile('h1', 0, 3, 1, { sides: ['S'], exit: 'N' }),
       ],
       parts: [
         box([-0.5, BOTTOM, -0.5], [0.5, 0, 0.5], 'stone'),
@@ -79,21 +73,17 @@ export const level02: LevelDef = {
         stairs(-1, 0, 0, 'W', 'warm', -0.85),
         box([-2.5, -0.85, -0.5], [-1.5, 1, 0.5], 'stone'),
         box([-2.38, -1.05, -0.36], [-0.62, -0.85, 0.36], 'stone'),
-        // pier carrying the balcony
-        box([-0.5, -1.15, 0.5], [0.5, 3, 1.5], 'stone'),
-        win([0, 1.5, 1.5], 'S', 0.14, 0.55),
+        box([-0.5, -1.15, 0.5], [0.5, 2.4, 1.5], 'stone'),
+        win([0, 1.2, 1.5], 'S', 0.14, 0.55),
         win([0.5, 0.3, 1.0], 'E', 0.14, 0.5),
-        { kind: 'inlay', at: [0, 3, 1], size: 0.5, c: 'accent' },
-        // gate house over the passage; the door faces the balcony
         box([-0.5, 0, -0.5], [-0.36, 1.25, -0.36], 'stone'),
         box([0.36, 0, -0.5], [0.5, 1.25, -0.36], 'stone'),
-        box([-0.5, 1.25, -0.5], [0.5, 4.4, 0.5], 'stone'),
+        box([-0.5, 1.25, -0.5], [0.5, 3.6, 0.5], 'stone'),
         box([-0.56, 1.25, -0.56], [0.56, 1.4, 0.56], 'warm'),
-        box([-0.6, 4.4, -0.6], [0.6, 4.56, 0.6], 'warm'),
-        { kind: 'cyl', at: [0, 4.56, 0], r: 0.5, h: 0.22, c: 'stone', seg: 28 },
-        { kind: 'dome', at: [0, 4.78, 0], r: 0.5, c: 'accent' },
-        ...finial(0, 5.24, 0, 'cool'),
-        door([0, 3, 0.5], 'S', 0.5, 0.86),
+        box([-0.6, 3.6, -0.6], [0.6, 3.76, 0.6], 'warm'),
+        { kind: 'cyl', at: [0, 3.76, 0], r: 0.5, h: 0.22, c: 'stone', seg: 28 },
+        { kind: 'dome', at: [0, 3.98, 0], r: 0.5, c: 'accent' },
+        ...finial(0, 4.44, 0, 'cool'),
         win([0.5, 2.2, 0], 'E', 0.14, 0.5),
         win([0, 2.0, -0.5], 'N', 0.14, 0.5),
         { kind: 'inlay', at: [0, 0, 0], size: 0.5, c: 'accent' },
@@ -102,10 +92,10 @@ export const level02: LevelDef = {
       ],
     },
     {
-      // SECOND TOWER — a round keep two storeys higher
+      // ROUND TOWER — stands still (turned to face the first tower)
       id: 'T2',
       origin: [7, 3, 2],
-      motion: { kind: 'rotate', stops: [0, 90, 180, 270], start: 270, driver: { kind: 'wheel', at: [0, -1.9, 0], r: 0.98 } },
+      motion: FIXED(270),
       tiles: [
         tile('s2', 0, 0, 2, { sides: ['N', 'S'] }),
         tile('s1', 0, 0, 1, { sides: ['N', 'S'] }),
@@ -121,65 +111,51 @@ export const level02: LevelDef = {
         stairs(0, 0, -1, 'N', 'stone', -0.85),
         box([-0.5, -0.85, -2.5], [0.5, 1, -1.5], 'warm'),
         box([-0.36, -1.05, -2.38], [0.36, -0.85, -0.62], 'warm'),
-        // a slim belvedere over the landing
         box([-0.46, 1, -2.46], [-0.36, 1.9, -2.36], 'stone'),
-        box([0.36, 1, -2.46], [0.46, 1.9, -2.36], 'stone'),
-        box([-0.52, 1.9, -2.52], [0.52, 2.02, -2.3], 'stone'),
-        { kind: 'cyl', at: [0, 2.02, -2.4], r: 0.08, h: 0.16, c: 'stone' },
-        { kind: 'sphere', at: [0, 2.26, -2.4], r: 0.1, c: 'accent' },
+        box([-0.46, 1, -1.64], [-0.36, 1.9, -1.54], 'stone'),
+        box([-0.52, 1.9, -2.52], [-0.3, 2.02, -1.48], 'stone'),
+        { kind: 'sphere', at: [-0.41, 2.12, -2.0], r: 0.09, c: 'accent' },
         win([0.5, 0.3, -2], 'E', 0.14, 0.5),
         win([0, -0.4, 2.5], 'S', 0.14, 0.4),
         { kind: 'inlay', at: [0, 0, 0], size: 0.5, c: 'cool' },
         { kind: 'inlay', at: [0, 1, -2], size: 0.5, c: 'accent' },
-        { kind: 'cyl', at: [0, -2.15, 0], r: 0.7, h: 0.5, c: 'stone', seg: 28 },
       ],
     },
     {
-      // THE LIFT beside the first tower
-      id: 'L',
-      origin: [3, 0, 1],
-      motion: { kind: 'slide', axis: [0, 1, 0], stops: [0, 1, 2], start: 0, driver: { kind: 'grip', at: [0, -0.18, 0.5], face: 'S' } },
-      tiles: [tile('m', 0, 0, 0)],
-      parts: [
-        box([-0.5, -0.3, -0.5], [0.5, 0, 0.5], 'accent'),
-        box([-0.42, -0.44, -0.42], [0.42, -0.3, 0.42], 'warm'),
-        { kind: 'inlay', at: [0, 0, 0], size: 0.46, c: 'stone' },
-      ],
-    },
-    {
-      id: 'shaft',
+      // DOOR TOWER — low and near; seen from the side, its balcony meets the round tower's top
+      id: 'D',
       origin: [0, 0, 0],
-      tiles: [],
+      tiles: [tile('d', 7, 1, 5, { sides: ['W'], exit: 'S' })],
       parts: [
-        box([3.58, BOTTOM, 0.52], [3.7, 3.1, 0.64], 'warm'),
-        box([3.58, BOTTOM, 1.36], [3.7, 3.1, 1.48], 'warm'),
-        box([3.6, BOTTOM, 0.64], [3.66, 3.1, 1.36], 'cool'),
-        box([3.52, 3.1, 0.46], [3.76, 3.26, 1.54], 'stone'),
-        ...finial(3.64, 3.26, 1, 'accent'),
+        column(7, 5, 1, 'stone'),
+        box([6.5, BOTTOM, 5.5], [7.5, 2.5, 6.5], 'stone'),
+        box([6.44, 2.5, 5.44], [7.56, 2.66, 6.56], 'warm'),
+        roof(7, 2.66, 6, 1.12, 0.9, 'accent'),
+        ...finial(7, 3.56, 6, 'cool'),
+        door([7, 1, 5.5], 'N', 0.5, 0.86),
+        win([7.5, 0.2, 5], 'E', 0.14, 0.5),
+        win([7.5, 1.4, 6], 'E', 0.14, 0.5),
+        win([7, -0.4, 6.5], 'S', 0.14, 0.55),
+        { kind: 'inlay', at: [7, 1, 5], size: 0.5, c: 'accent' },
       ],
     },
   ],
   hints: [
-    { text: 'Drag the coral bridge toward the first tower (or use its little handle).', target: 'B', done: (s) => s.values.B === 1 || [...s.visited].some((k) => k.startsWith('T1:')) },
-    { text: 'Tap the first tower to step onto it.', tile: 'T1:c0', done: (s) => [...s.visited].some((k) => k.startsWith('T1:')) },
+    { text: 'Slide the coral bridge over to the tower.', slide: { id: 'B', to: 1 }, target: 'B', done: (s) => s.values.B === 1 || [...s.visited].some((k) => k.startsWith('T1:')) },
+    { text: 'Tap the tower to step onto it.', tile: 'T1:c0', done: (s) => [...s.visited].some((k) => k.startsWith('T1:')) },
     {
-      text: 'Turn the first tower until the top of its stairs points at the round tower.',
+      text: 'Turn the tower with its coral wheel. You ride along. Stop when its stairs point at the round tower.',
+      turn: { id: 'T1', to: 180 },
       target: 'T1',
       done: (s) => (((s.values.T1 % 360) + 360) % 360) === 180 || [...s.visited].some((k) => k.startsWith('T2:')),
     },
-    { text: 'They meet. Tap the round tower to cross.', tile: 'T2:c', done: (s) => [...s.visited].some((k) => k.startsWith('T2:')) },
+    { text: 'The stairs meet the round tower. Tap the round tower to walk across.', tile: 'T2:tt', done: (s) => [...s.visited].some((k) => k.startsWith('T2:')) },
     {
-      text: 'Turn the round tower (you ride with it) until its top landing touches the coral lift.',
-      target: 'T2',
-      done: (s) => (((s.values.T2 % 360) + 360) % 360) === 180 || s.visited.has('L:m'),
+      text: 'Turn the whole world. From the new side, this tower’s top meets the door tower.',
+      view: 90,
+      done: (s) => s.view === 90 || s.visited.has('D:d'),
     },
-    { text: 'Tap the lift to step onto it.', tile: 'L:m', done: (s) => s.visited.has('L:m') },
-    {
-      text: 'Turn the whole world half way round: tap ⟲ twice (or drag the sky a long way).',
-      world: 1,
-      done: (s) => s.view === 180 || s.visited.has('T1:h1'),
-    },
-    { text: 'From the far side the door balcony meets the lift. Tap it.', tile: 'T1:h1' },
+    { text: 'Tap the door tower’s balcony to finish.', tile: 'D:d' },
   ],
-  frame: { pad: 1.06 },
+  frame: { pad: 1.08 },
 }

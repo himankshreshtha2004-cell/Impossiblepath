@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Hint } from '../engine/types'
+import { liveGuide, type LiveGuide } from '../ui/guide'
 import type { World } from '../engine/world'
 import { BUILT } from '../levels'
 import { setVolumes } from '../audio/sound'
@@ -46,6 +47,7 @@ interface Game {
   guide: boolean
   hint: Hint | null
   hintStep: number
+  live: LiveGuide | null
   hintTotal: number
   hintAt: number
   /** The guide opened by itself after the player stood still for a while. */
@@ -84,6 +86,7 @@ export const useGame = create<Game>((set, get) => {
     guide: false,
     hint: null,
     hintStep: 0,
+    live: null,
     hintTotal: 0,
     hintAt: 0,
     autoGuide: false,
@@ -118,7 +121,7 @@ export const useGame = create<Game>((set, get) => {
       set({ guide: true, autoGuide: auto, hintAt: performance.now() })
       get().refreshHint()
     },
-    clearHint: () => set({ guide: false, hint: null, autoGuide: false }),
+    clearHint: () => set({ guide: false, hint: null, live: null, autoGuide: false }),
     refreshHint: () => {
       const w = world
       if (!w || !get().guide) return
@@ -126,7 +129,10 @@ export const useGame = create<Game>((set, get) => {
       const hints = w.level.hints
       let i = hints.findIndex((x) => !x.done || !x.done(ps))
       if (i < 0) i = hints.length - 1
-      if (get().hint !== hints[i] || get().hintTotal !== hints.length) set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length })
+      const live = liveGuide(hints[i], w)
+      const prev = get().live
+      if (get().hint !== hints[i] || get().hintTotal !== hints.length || prev?.line !== live.line || prev?.worldDir !== live.worldDir)
+        set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length, live })
     },
     newGame: () => {
       const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1 }

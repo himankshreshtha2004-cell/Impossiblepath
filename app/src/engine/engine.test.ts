@@ -14,7 +14,7 @@ function combos(L: LevelDef) {
 }
 /** For each authored link, the states (world view + the link's own structures) in which it is live. */
 function liveStates(L: LevelDef, link: [string, string]) {
-  const ids = [...new Set(link.map((k) => k.split(':')[0]))].filter((id) => L.structures.find((s) => s.id === id)?.motion?.driver.kind !== undefined)
+  const ids = [...new Set(link.map((k) => k.split(':')[0]))].filter((id) => { const d = L.structures.find((s) => s.id === id)?.motion?.driver; return d && d.kind !== 'flag' })
   const seen = new Set<string>()
   for (const c of combos(L)) {
     const g = buildGraph(L, c, () => true, c['@view'])
@@ -70,14 +70,11 @@ describe('level 01 — perspective joints at every world view and rotation state
 
 describe('level 02 — perspective joints at every world view and rotation state', () => {
   const L = BUILT[2]
-  it('first tower stairs ↔ second tower only at world 0°, T1=180°, T2=270°', () => {
-    expect(liveStates(L, ['T1:a', 'T2:s2'])).toEqual(['@view=0 T1=180 T2=270'])
+  it('first tower stairs ↔ round tower only at world 0° with the first tower at 180°', () => {
+    expect(liveStates(L, ['T1:a', 'T2:s2'])).toEqual(['@view=0 T1=180'])
   })
-  it('second tower top ↔ lift only at world 0°, T2=180°, lift low', () => {
-    expect(liveStates(L, ['T2:tt', 'L:m'])).toEqual(['@view=0 T2=180 L=0'])
-  })
-  it('door balcony ↔ lift only from the far side (world 180°): T1=180° with the lift low, or T1=90° with it raised', () => {
-    expect(liveStates(L, ['T1:h1', 'L:m'])).toEqual(['@view=180 T1=180 L=0', '@view=180 T1=90 L=2'])
+  it('round tower top ↔ door balcony only when the world is turned to 90°', () => {
+    expect(liveStates(L, ['T2:tt', 'D:d'])).toEqual(['@view=90'])
   })
 })
 
@@ -129,7 +126,7 @@ describe('every built level', () => {
       const turns = sol.moves.filter((m) => m.startsWith('set ') && rotateIds.has(m.slice(4).split('=')[0]))
       const slides = sol.moves.filter((m) => m.startsWith('set ') && !rotateIds.has(m.slice(4).split('=')[0]))
       const views = sol.moves.filter((m) => m.startsWith('set @view'))
-      expect(turns.length).toBeGreaterThanOrEqual(2)
+      expect(turns.length).toBeGreaterThanOrEqual(1)
       expect(views.length).toBeGreaterThanOrEqual(1)
       expect(slides.length).toBeGreaterThanOrEqual(0)
       // gentle early levels: a short route

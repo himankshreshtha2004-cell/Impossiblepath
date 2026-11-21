@@ -407,7 +407,9 @@ export function LevelView({ level }: { level: LevelDef }) {
       window.removeEventListener('keydown', key)
       endSpin()
     }
-  })
+    // attach once per level: re-attaching on every render would cut off a drag in progress
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world])
 
   /** Which tile did the player tap? The front-most visible surface decides; else the nearest tile on screen. */
   const pick = (x: number, y: number): string | null => {
@@ -524,7 +526,8 @@ export function LevelView({ level }: { level: LevelDef }) {
       ))}
       <Traveller world={() => world} />
       <Marker key={tap.current.born} kind={tap.current.kind} born={tap.current.born} pos={() => (tap.current.key ? world.liveCenter(tap.current.key) : null)} />
-      {hint?.tile && <Marker kind="hint" born={0} pos={() => world.liveCenter(hint.tile!)} />}
+      {hint?.tile && <Marker kind="hint" born={0} pos={() => (world.node === hint.tile ? null : world.liveCenter(hint.tile!))} />}
+      <GuideArrow world={world} handleWorld={handleWorld} />
       <JointFlash world={world} flash={flash} />
       <Marker
         kind="hint"
@@ -537,6 +540,83 @@ export function LevelView({ level }: { level: LevelDef }) {
       />
       <Lights frame={frame} world={world} />
     </group>
+  )
+}
+
+/**
+ * The guide's arrows: a curved arrow around a wheel showing which way to turn it (the way that
+ * reaches the goal soonest), or a straight arrow along a sliding piece's track.
+ */
+function GuideArrow({ world, handleWorld }: { world: World; handleWorld: (id: string) => V3 }) {
+  const mesh = useRef<THREE.Mesh>(null!)
+  const head = useRef<THREE.Mesh>(null!)
+  const key = useRef('')
+  const mat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#fffdf6', transparent: true, depthTest: false, depthWrite: false }), [])
+  const headGeo = useMemo(() => new THREE.ConeGeometry(0.16, 0.36, 16), [])
+  useFrame((s) => {
+    const g = useGame.getState()
+    const h = g.guide ? g.hint : null
+    let pts: THREE.Vector3[] | null = null
+    let k = ''
+    if (h?.turn && !world.dragging) {
+      const cur = ((Math.round(world.values[h.turn.id] ?? 0) % 360) + 360) % 360
+      let d = (((h.turn.to - cur) % 360) + 360) % 360
+      if (d > 180) d -= 360
+      if (d !== 0) {
+        const sign = Math.sign(d)
+        const c = handleWorld(h.turn.id)
+        const def = world.map.get(h.turn.id)!.motion!.driver as { r?: number }
+        const R = (def.r ?? 1) + 0.38
+        const front = 315 + world.view // the side of the wheel facing the camera
+        const a0 = front - sign * 55
+        const a1 = front + sign * 55
+        k = `t${h.turn.id}|${Math.round(front)}|${sign}|${c.map((v) => v.toFixed(2)).join()}`
+        if (k !== key.current) {
+          pts = []
+          for (let i = 0; i <= 28; i++) {
+            const a = ((a0 + ((a1 - a0) * i) / 28) * Math.PI) / 180
+            pts.push(new THREE.Vector3(c[0] + R * Math.cos(a), c[1], c[2] - R * Math.sin(a)))
+          }
+        }
+      }
+    } else if (h?.slide && !world.dragging) {
+      const def = world.map.get(h.slide.id)!
+      const m = def.motion as Extract<typeof def.motion, { kind: 'slide' }>
+      const cur = world.values[h.slide.id] ?? 0
+      const d = h.slide.to - cur
+      if (Math.abs(d) > 1e-3) {
+        const t = def.tiles[0] ? world.liveCenter(`${def.id}:${def.tiles[0].id}`) : handleWorld(def.id)
+        const sign = Math.sign(d)
+        const ax = m!.axis
+        k = `s${def.id}|${sign}|${t.map((v) => v.toFixed(2)).join()}`
+        if (k !== key.current) {
+          pts = []
+          for (let i = 0; i <= 8; i++) {
+            const f = -0.5 + (1.7 * i) / 8
+            pts.push(new THREE.Vector3(t[0] + ax[0] * sign * f, t[1] + 0.45 + ax[1] * sign * f, t[2] + ax[2] * sign * f))
+          }
+        }
+      }
+    }
+    const show = k !== ''
+    mesh.current.visible = head.current.visible = show
+    if (!show) return void (key.current = '')
+    if (pts) {
+      key.current = k
+      mesh.current.geometry.dispose()
+      mesh.current.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 8, false)
+      const end = pts[pts.length - 1]
+      const dir = end.clone().sub(pts[pts.length - 2]).normalize()
+      head.current.position.copy(end).addScaledVector(dir, 0.1)
+      head.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+    }
+    mat.opacity = 0.65 + 0.3 * Math.sin(s.clock.elapsedTime * 4)
+  })
+  return (
+    <>
+      <mesh ref={mesh} material={mat} renderOrder={30} visible={false}><bufferGeometry /></mesh>
+      <mesh ref={head} geometry={headGeo} material={mat} renderOrder={30} visible={false} />
+    </>
   )
 }
 

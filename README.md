@@ -41,15 +41,21 @@ directory `dist`.
 
 ## Hints
 
-Every level has a step-by-step guide. **Hint** (top right, or `H`) opens it.
+Every level has a step-by-step guide. It opens by itself on levels you haven't finished yet;
+**Hint** (top right, or `H`) shows or hides it.
 
-* It shows "Step N of M" and moves on by itself as you play.
-* It pulses the wheel or platform to use, rings the tile to tap, and pulses the ⟲ / ⟳ button to
-  press.
+* Each step shows "Step N of M", what the step is for, and a live instruction checked against
+  the actual game state:
+  * which corner button to tap and how many times ("Tap ⟲ once");
+  * how many quarter turns are left, with a white arrow around the wheel showing which way;
+  * a white arrow along a sliding piece's track;
+  * a glowing ring on the tile to tap;
+  * "✓ That's it" when a step's goal is met.
+* The guide moves on by itself as you play, in whatever order you do things.
 * If nothing changes for about 14 seconds, it opens on its own.
-* When a new impossible path forms, the tile across it keeps a soft ring until you visit it.
 * The ⟲ ⟳ buttons in the bottom corners turn the world a quarter turn (same as dragging the sky).
-* The tests replay each level's solution and check that the guide follows it to the door.
+* The browser test plays every level using only the guide (its button, its arrow direction, its
+  ringed tile) and reaches the door.
 
 ## How the impossible paths work
 
@@ -108,12 +114,10 @@ somewhere else, and turns a tower again so the first joint breaks and a new one 
   * Ride the tower to 270°, then turn the world back to 0°: the stair head meets the far
     walkway. Cross.
   * Turn the tower back to 0°: the door balcony meets the coral platform. Exit.
-* **Level 02 (8 moves):**
-  * Slide the bridge to reach the first tower.
-  * Ride the first tower to 180° to meet the second tower. Cross.
-  * Ride the second tower to 180° so its top meets the lift. Cross.
-  * Turn the world to 180° to look from the far side: the balcony meets the lift. Exit.
-  * A longer route also works: raise the lift and turn the first tower to 90°.
+* **Level 02 (6 moves, one straight route):**
+  * Slide the bridge onto the first tower.
+  * Turn the first tower to 180° (you ride it): its stairs meet the round tower. Cross and climb.
+  * Turn the world a quarter turn: the round tower's top meets the door tower's balcony. Exit.
 
 `scripts/analyze.ts` prints every joint at every rotation state and the shortest solution:
 `npx vite-node scripts/analyze.ts 1`.

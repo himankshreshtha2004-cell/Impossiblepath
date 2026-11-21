@@ -149,32 +149,34 @@ export const level01: LevelDef = {
   ],
   hints: [
     {
-      text: 'Turn the whole world a quarter turn: drag the sky to the left, or tap ⟲ at the bottom left.',
-      world: 1,
+      text: 'Turn the whole world. Seen from the new side, your island meets the tower.',
+      view: 90,
       done: (s) => s.view === 90 || [...s.visited].some((k) => k.startsWith('T:')),
     },
     {
-      text: 'From this side your island meets the tower. Tap the tower to walk across.',
+      text: 'Your island now meets the tower. Tap the tower to walk across.',
       tile: 'T:c0',
       done: (s) => [...s.visited].some((k) => k.startsWith('T:')),
     },
     {
-      text: 'Now turn the tower itself: drag its coral wheel (or the tower) round one quarter turn.',
+      text: 'Now turn the tower itself with its coral wheel. You ride along.',
+      turn: { id: 'T', to: 270 },
       target: 'T',
       done: (s) => (((s.values.T % 360) + 360) % 360) === 270 || s.visited.has('W:w0'),
     },
     {
-      text: 'Turn the world back: drag the sky to the right, or tap ⟳ at the bottom right.',
-      world: -1,
+      text: 'Turn the world back. The top of the stairs will meet the far walkway.',
+      view: 0,
       done: (s) => (s.view === 0 && (((s.values.T % 360) + 360) % 360) === 270) || s.visited.has('W:w0'),
     },
-    { text: 'The top of the stairs meets the far walkway. Tap it to cross.', tile: 'W:w0', done: (s) => s.visited.has('W:w0') },
+    { text: 'The stairs meet the far walkway. Tap the walkway to cross.', tile: 'W:w0', done: (s) => s.visited.has('W:w0') },
     {
-      text: 'Turn the tower back one quarter turn. Its door balcony will meet the coral platform at the top of this tower.',
+      text: 'Turn the tower back with its wheel. Its door balcony will meet the coral platform on this tower.',
+      turn: { id: 'T', to: 0 },
       target: 'T',
       done: (s) => ((((s.values.T % 360) + 360) % 360) === 0 && s.view === 0 && s.values.P === 1) || s.visited.has('T:h'),
     },
-    { text: 'Climb up over the coral platform and tap the balcony to reach the door.', tile: 'T:h' },
+    { text: 'Tap the balcony by the door. You climb up, cross the coral platform and step through.', tile: 'T:h' },
   ],
   frame: { pad: 1.08 },
 }

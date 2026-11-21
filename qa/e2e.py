@@ -110,6 +110,40 @@ async def main():
             await pg.mouse.up()
             await pg.wait_for_timeout(1500)
 
+        async def follow_guide(label, max_steps=16):
+            """Play using only the guide: its button, its arrow direction, its ringed tile."""
+            if not await ev(f"{G}.guide"):
+                await pg.get_by_role('button', name='Hint', exact=True).click()
+                await pg.wait_for_timeout(600)
+            seen = []
+            for _ in range(max_steps):
+                if await ev(f"{G}.phase !== 'play'"):
+                    break
+                h = await ev(f"(() => {{ const h = {G}.hint; const l = {G}.live; return h && {{ step: {G}.hintStep, view: h.view ?? null, turn: h.turn ?? null, slide: h.slide ?? null, tile: h.tile ?? null, dir: l && l.worldDir ? l.worldDir : null, line: l ? l.line : '' }} }})()")
+                if not h:
+                    break
+                seen.append(h['step'])
+                if h['view'] is not None:
+                    side = 'left' if h['dir'] == 1 else 'right'
+                    check(f'{label}: guide step {h["step"]} pulses the ⟲/⟳ button it names', await pg.locator(f'.world-btn.{side}.pulse').count() == 1, h['line'])
+                    await pg.locator(f'.world-btn.{side}').click()
+                    await wait_for(f"{W}.settledView() !== null", 20)
+                    await pg.wait_for_timeout(500)
+                elif h['turn']:
+                    cur = ang(await ev(f"{W}.values['{h['turn']['id']}']"))
+                    d = (h['turn']['to'] - cur) % 360
+                    if d > 180: d -= 360
+                    await turn_wheel(h['turn']['id'], d)
+                elif h['slide']:
+                    cur = await ev(f"{W}.values['{h['slide']['id']}']")
+                    axis = await ev(f"{W}.map.get('{h['slide']['id']}').motion.axis")
+                    await slide_grip(h['slide']['id'], axis, h['slide']['to'] - cur)
+                elif h['tile']:
+                    await click_tile(h['tile'])
+                    await wait_for(f"({W}.node === '{h['tile']}' && !{W}.edge) || {G}.phase !== 'play'", 40)
+                await pg.wait_for_timeout(700)
+            return seen
+
         def ang(v):
             return ((v % 360) + 360) % 360
 
@@ -128,11 +162,12 @@ async def main():
         await scr('e2e_02_level01')
 
         # ------------------------------------------------------------------ level 01
-        # The guide: Hint opens step 1, which points at turning the world
-        await pg.get_by_role('button', name='Hint', exact=True).click()
-        await pg.wait_for_timeout(900)
+        # The guide opens by itself on a level not yet completed, at step 1
+        await wait_for(f"{G}.guide", 8)
+        check('guide opens by itself on an unplayed level', await ev(f"{G}.guide"))
+        await pg.wait_for_timeout(600)
         check('guide opens at step 1 of the level', await ev(f"{G}.guide && {G}.hintStep === 1"), await ev(f"{G}.hintStep"))
-        check('step 1 says to turn the whole world and the ⟲ button pulses', 'Turn the whole world' in (await ev(f"{G}.hint.text")) and await pg.locator('.world-btn.left.pulse').count() == 1)
+        check('step 1 says to turn the whole world, names ⟲ once, and ⟲ pulses', 'Turn the whole world' in (await ev(f"{G}.hint.text")) and 'once' in (await ev(f"{G}.live.line")) and await pg.locator('.world-btn.left.pulse').count() == 1, await ev(f"{G}.live.line"))
         await scr('e2e_02b_guide')
 
         # Phase A — turn the WHOLE WORLD by dragging the sky
@@ -186,32 +221,13 @@ async def main():
         await pg.wait_for_timeout(1500)
         await scr('e2e_09_level02')
 
-        # ------------------------------------------------------------------ level 02
-        await slide_grip('B', [1, 0, 0], 1)
-        check('L2 A: bridge in, step onto the first tower', await walk('T1:c0'))
-        await turn_wheel('T1', 90)
-        check('L2 B: first tower ridden to 180°', ang(await ev(f"{W}.values.T1")) == 180 and await ev(f"{W}.node") == 'T1:c0')
-        check('L2 B: crosses to the second tower', await walk('T2:c'))
-        await scr('e2e_10_on_T2')
-        await turn_wheel('T2', -90)
-        check('L2 C: second tower ridden to 180°', ang(await ev(f"{W}.values.T2")) == 180 and await ev(f"{W}.node") == 'T2:c')
-        check('L2 C: crosses from its top onto the lift', await walk('L:m'))
-        # press on the part of the lift in view (the second tower's landing overlaps its east half)
-        hit = await ev(f"(() => {{ const c = {W}.liveCenter('L:m'); const p = __ip.toScreen([c[0] - 0.3, c[1], c[2] - 0.05]); return __ip.hitAt(p[0], p[1]) }})()")
-        check('L2 C: the lift is visible and grabbable where pressed', hit and hit['struct'] == 'L', hit and hit['struct'])
-        # the easier route: straight from the lift, turn the world round with the ⟲ button
-        check('L2 C: no route to the balcony from the front', not await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T1:h1'))"))
-        await pg.locator('.world-btn.left').click()
-        await pg.wait_for_timeout(1200)
-        await pg.locator('.world-btn.left').click()
-        await pg.wait_for_timeout(1600)
-        check('L2 C: ⟲ button twice turns the world to the far side (180°)', ang(await ev(f"{W}.view")) == 180, await ev(f"{W}.view"))
-        check('L2 C: tower and lift states unchanged by the world turn', ang(await ev(f"{W}.values.T1")) == 180 and await ev(f"{W}.values.L") == 0)
-        check('L2 C: from the far side the balcony meets the lift', await ev(f"{W}.graph.edges.some(e => e.kind === 'illusion' && [e.a,e.b].includes('T1:h1'))"))
-        await scr('e2e_11_final_joint')
-        await click_tile('T1:h1')
-        ok = await wait_for(f"{G}.phase === 'end' || {G}.levelId === 3", 40)
-        check('L2: door reached, level complete', ok, await ev(f"{G}.phase"))
+        # ------------------------------------------------------------------ level 02 (played purely by the guide)
+        await wait_for(f"{G}.guide", 8)
+        check('L2: guide opens by itself on an unplayed level', await ev(f"{G}.guide"))
+        await scr('e2e_10_l2_guide')
+        steps = await follow_guide('L2')
+        check('L2: following the guide alone reaches the door', await wait_for(f"{G}.phase === 'end' || {G}.levelId === 3", 30), steps)
+        check('L2: the guide advanced step by step (1→6)', steps == sorted(steps) and steps[0] == 1 and steps[-1] == 6, steps)
         await pg.wait_for_timeout(1200)
         await scr('e2e_12_end')
 
@@ -244,6 +260,12 @@ async def main():
         await scr('e2e_15_replay')
 
         await pg.get_by_role('button', name='Resume').count()
+        # replay Level 01 from scratch, following only the guide
+        await ev(f"{G}.restart()")
+        await wait_for(f"{G}.phase === 'play'", 20)
+        await pg.wait_for_timeout(800)
+        steps = await follow_guide('L1 replay')
+        check('L1 replay: following the guide alone reaches the door', await wait_for(f"{G}.phase === 'exit' || {G}.phase === 'outro' || {G}.levelId === 2", 30), steps)
 
         # ------------------------------------------------------------------ phone: touch swipe + tap
         ctx = await b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
@@ -254,6 +276,7 @@ async def main():
         t0 = time.time()
         while time.time() - t0 < 30 and not await mp.evaluate(f"{G}.phase === 'play'"):
             await mp.wait_for_timeout(250)
+        # (no settle wait needed: swipes now survive the guide opening mid-drag)
         await mp.wait_for_timeout(800)
         cdp = await ctx.new_cdp_session(mp)
         sx, sy = 340, 760
@@ -267,7 +290,7 @@ async def main():
         while time.time() - t0 < 20 and not await mp.evaluate(f"{W}.settledView() !== null"):
             await mp.wait_for_timeout(250)
         v = await mp.evaluate(f"{W}.view")
-        check('phone: a touch swipe across the sky turns the world', ang(v) in (90, 180), v)
+        check('phone: a touch swipe across the sky turns the world', ang(v) in (90, 180), [v, await mp.evaluate(f"JSON.stringify({W}.values)"), await mp.evaluate(f"JSON.stringify(__ip.hitAt({sx},{sy}))")])
         await mp.evaluate(f"{W}.setView(90)")
         await mp.wait_for_timeout(500)
         x, y = await mp.evaluate(f"__ip.toScreen({W}.liveCenter('T:c0'))")

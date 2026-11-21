@@ -152,9 +152,21 @@ function Hud() {
   // the guide follows the player: re-check which step applies several times a second
   useEffect(() => {
     if (!st.guide) return
-    const t = setInterval(() => useGame.getState().refreshHint(), 350)
+    useGame.getState().refreshHint()
+    const t = setInterval(() => useGame.getState().refreshHint(), 250)
     return () => clearInterval(t)
   }, [st.guide])
+  // levels not yet completed open with the guide showing (after the title card)
+  useEffect(() => {
+    if (st.phase !== 'play') return
+    const g = useGame.getState()
+    if (g.save.completed.includes(g.levelId) || g.guide) return
+    const t = setTimeout(() => {
+      const n = useGame.getState()
+      if (n.phase === 'play' && !n.guide && !n.paused) n.showHint(false)
+    }, 2600)
+    return () => clearTimeout(t)
+  }, [st.phase, st.levelId, st.runId])
   // if nothing has changed for a while, offer the guide by itself (once per attempt)
   useEffect(() => {
     if (st.phase !== 'play') return
@@ -180,7 +192,7 @@ function Hud() {
     initAudio()
     getWorld()?.turnView(dir)
   }
-  const pulse = (dir: 1 | -1) => (st.guide && st.hint?.world === dir ? ' pulse' : '')
+  const pulse = (dir: 1 | -1) => (st.guide && st.live?.worldDir === dir ? ' pulse' : '')
   return (
     <>
       <button className="icon pause-btn" aria-label="Pause" onClick={() => (sfx.ui(), st.setPaused(true))}>
@@ -205,6 +217,7 @@ function Hud() {
           {st.autoGuide ? 'A little help · ' : ''}Step {st.hintStep} of {st.hintTotal}
         </div>
         <div className="gtext">{st.hint?.text}</div>
+        {st.live?.line && <div className={'glive' + (st.live.met ? ' met' : '')}>{st.live.line}</div>}
         <div className="dots">
           {Array.from({ length: st.hintTotal }, (_, i) => (
             <i key={i} className={i < st.hintStep - 1 ? 'done' : i === st.hintStep - 1 ? 'now' : ''} />

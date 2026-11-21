@@ -83,6 +83,10 @@ export interface Hint {
   tile?: string
   /** Suggest turning the whole world this way (+1 = ⟲ / drag left, −1 = ⟳ / drag right). */
   world?: 1 | -1
+  /** Precise goals the guide can measure and point at. */
+  turn?: { id: string; to: number }
+  slide?: { id: string; to: number }
+  view?: number
   /** The hint no longer applies once this returns true. */
   done?: (s: PuzzleState) => boolean
 }
