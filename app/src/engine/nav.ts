@@ -1,5 +1,5 @@
 import { DIRV, type Dir, type LevelDef, type StructureDef, type TileDef, type V3 } from './types'
-import { add, same3, sameScreen, scale, sub } from './iso'
+import { add, same3, sameScreenAt, scale, sub } from './iso'
 
 // ---------------------------------------------------------------------------------------------
 // Affine transforms (rotation about y + translation) for structures, with parent chaining.
@@ -113,7 +113,13 @@ const opposite = (a: V3, b: V3) => same3(a, scale(b, -1), 1e-3)
  *    separated only along the view diagonal) and face each other. These exist only while the
  *    architecture holds them in alignment — rotate or slide a piece away and the edge vanishes.
  */
-export function buildGraph(level: LevelDef, values: Record<string, number>, settled: (id: string) => boolean = () => true): Graph {
+export function buildGraph(
+  level: LevelDef,
+  values: Record<string, number>,
+  settled: (id: string) => boolean = () => true,
+  /** Snapped world view in degrees, or null while the world is turning (no perspective joints). */
+  view: number | null = 0,
+): Graph {
   const nodes = worldNodes(level, values, settled)
   const adj = new Map<string, Edge[]>()
   const edges: Edge[] = []
@@ -134,7 +140,7 @@ export function buildGraph(level: LevelDef, values: Record<string, number>, sett
         }),
       )
     }
-  for (const [ka, kb] of level.links) {
+  if (view !== null) for (const [ka, kb] of level.links) {
     const A = nodes.get(ka)
     const B = nodes.get(kb)
     if (!A || !B) continue
@@ -142,7 +148,7 @@ export function buildGraph(level: LevelDef, values: Record<string, number>, sett
       B.cps.forEach((cb, ib) => {
         if (!opposite(ca.dir, cb.dir) || same3(ca.p, cb.p)) return
         // Horizontal directions only — the walk must read as one continuous path on screen.
-        if (sameScreen(ca.p, cb.p)) push({ a: A.key, b: B.key, ca: ia, cb: ib, kind: 'illusion' })
+        if (sameScreenAt(ca.p, cb.p, view)) push({ a: A.key, b: B.key, ca: ia, cb: ib, kind: 'illusion' })
       }),
     )
   }

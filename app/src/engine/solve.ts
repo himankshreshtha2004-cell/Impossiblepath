@@ -17,11 +17,20 @@ function flagValues(level: LevelDef, flags: Set<string>, values: Record<string, 
   return v
 }
 
+const VIEW_ID = '@view'
+/** Player-driven "dimensions" of the puzzle: every handle/grip structure plus the world view. */
+function drivenOf(level: LevelDef) {
+  const ds = level.structures.filter((s) => s.motion && s.motion.driver.kind !== 'flag').map((s) => ({ id: s.id, stops: s.motion!.stops, start: s.motion!.start }))
+  ds.push({ id: VIEW_ID, stops: level.views ?? [0, 90, 180, 270], start: level.startView ?? 0 })
+  return ds
+}
+const graphFor = (level: LevelDef, flags: Set<string>, vals: Record<string, number>) => buildGraph(level, flagValues(level, flags, vals), () => true, vals[VIEW_ID] ?? 0)
+
 export function solve(level: LevelDef, limit = 200000): Solution | null {
   const map = structureMap(level)
-  const driven = level.structures.filter((s) => s.motion && s.motion.driver.kind !== 'flag')
+  const driven = drivenOf(level)
   const start = {
-    vals: Object.fromEntries(driven.map((s) => [s.id, s.motion!.start])) as Record<string, number>,
+    vals: Object.fromEntries(driven.map((s) => [s.id, s.start])) as Record<string, number>,
     flags: new Set<string>(),
     node: level.start,
   }
@@ -37,8 +46,7 @@ export function solve(level: LevelDef, limit = 200000): Solution | null {
   while (q.length) {
     const { st, moves } = q.shift()!
     if (++n > limit) return null
-    const values = flagValues(level, st.flags, st.vals)
-    const g = buildGraph(level, values)
+    const g = graphFor(level, st.flags, st.vals)
     if (!g.nodes.has(st.node)) continue
     for (const r of reachable(g, st.node)) {
       if (tileOf(r).exit) return { moves: [...moves, 'walk ' + r], states: n }
@@ -51,7 +59,7 @@ export function solve(level: LevelDef, limit = 200000): Solution | null {
       if (!seen.has(k)) seen.set(k, []), q.push({ st: nx, moves: [...moves, 'walk ' + r] })
     }
     for (const s of driven)
-      for (const stop of s.motion!.stops) {
+      for (const stop of s.stops) {
         if (stop === st.vals[s.id]) continue
         const nx = { vals: { ...st.vals, [s.id]: stop }, flags: st.flags, node: st.node }
         const k = sk(nx)
@@ -64,7 +72,7 @@ export function solve(level: LevelDef, limit = 200000): Solution | null {
 /** True if the exit can be reached without touching any mechanism (i.e. the level is trivial). */
 export function trivial(level: LevelDef) {
   const values = flagValues(level, new Set(), Object.fromEntries(level.structures.filter((s) => s.motion).map((s) => [s.id, s.motion!.start])))
-  const g = buildGraph(level, values)
+  const g = buildGraph(level, values, () => true, level.startView ?? 0)
   const map = structureMap(level)
   return [...reachable(g, level.start)].some((k) => {
     const [s, t] = k.split(':')
@@ -78,14 +86,14 @@ export function trivial(level: LevelDef) {
  */
 export function deadEnds(level: LevelDef, limit = 200000): { states: number; dead: string[] } {
   const map = structureMap(level)
-  const driven = level.structures.filter((s) => s.motion && s.motion.driver.kind !== 'flag')
+  const driven = drivenOf(level)
   const tileOf = (k: string) => {
     const [s, t] = k.split(':')
     return map.get(s)!.tiles.find((x) => x.id === t)!
   }
   type St = { vals: Record<string, number>; flags: Set<string>; node: string }
   const sk = (st: St) => JSON.stringify([driven.map((s) => st.vals[s.id]), [...st.flags].sort(), st.node])
-  const start: St = { vals: Object.fromEntries(driven.map((s) => [s.id, s.motion!.start])), flags: new Set(), node: level.start }
+  const start: St = { vals: Object.fromEntries(driven.map((s) => [s.id, s.start])), flags: new Set(), node: level.start }
   const succ = new Map<string, string[]>()
   const goal = new Set<string>()
   const q: St[] = [start]
@@ -95,7 +103,7 @@ export function deadEnds(level: LevelDef, limit = 200000): { states: number; dea
     const st = q.shift()!
     const k = sk(st)
     const out: string[] = []
-    const g = buildGraph(level, flagValues(level, st.flags, st.vals))
+    const g = graphFor(level, st.flags, st.vals)
     if (tileOf(st.node).exit) goal.add(k)
     const nexts: St[] = []
     if (g.nodes.has(st.node))
@@ -106,7 +114,7 @@ export function deadEnds(level: LevelDef, limit = 200000): { states: number; dea
         if (p) flags.add(p)
         nexts.push({ vals: st.vals, flags, node: r })
       }
-    for (const s of driven) for (const stop of s.motion!.stops) if (stop !== st.vals[s.id]) nexts.push({ vals: { ...st.vals, [s.id]: stop }, flags: st.flags, node: st.node })
+    for (const s of driven) for (const stop of s.stops) if (stop !== st.vals[s.id]) nexts.push({ vals: { ...st.vals, [s.id]: stop }, flags: st.flags, node: st.node })
     for (const n of nexts) {
       const nk = sk(n)
       out.push(nk)

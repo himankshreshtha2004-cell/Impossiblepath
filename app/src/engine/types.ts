@@ -87,6 +87,8 @@ export interface Hint {
 
 export interface PuzzleState {
   values: Record<string, number>
+  /** Snapped world view (0/90/180/270). */
+  view: number
   flags: Set<string>
   node: string
   visited: Set<string>
@@ -102,6 +104,9 @@ export interface LevelDef {
   links: [string, string][]
   structures: StructureDef[]
   hints: Hint[]
+  /** World views the player may turn to (default all four) and the one the level opens at. */
+  views?: number[]
+  startView?: number
   /** Optional framing tweaks. */
   frame?: { pad?: number; shiftY?: number; zoom?: number }
   /** Decorative clouds etc. */

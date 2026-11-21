@@ -5,7 +5,7 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import type { LevelDef, Palette, StructureDef, V3 } from '../engine/types'
 import { World } from '../engine/world'
 import { worldTransform, structureMap } from '../engine/nav'
-import { UP, VIEW, add, fromScreen, scale, screen } from '../engine/iso'
+import { add, lerp3, rightAt, rotV, scale, screenAt, upAt, viewAt } from '../engine/iso'
 import { BUILT } from '../levels'
 import { worldOf } from '../levels/catalog'
 import { getWorld, setWorld, useGame } from '../state/game'
@@ -18,8 +18,10 @@ import { U, setSky } from './materials'
 // ---------------------------------------------------------------------------------------------
 // Framing: fit the composed level into the viewport, isometric camera only ever looks one way.
 
-interface Frame { target: V3; w: number; h: number; minY: number; maxY: number }
+interface ViewFrame { target: V3; w: number; h: number }
+interface Frame { views: Record<number, ViewFrame>; w: number; h: number; minY: number; maxY: number; target: V3 }
 
+/** Fit the composed level for each of the four world views (the camera only ever looks down a diagonal). */
 function computeFrame(level: LevelDef): Frame {
   const map = structureMap(level)
   const tilesY: number[] = []
@@ -53,14 +55,31 @@ function computeFrame(level: LevelDef): Frame {
         }
     }
   }
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, maxY = -Infinity
-  for (const p of pts) {
-    const [x, y] = screen(p)
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
-    maxY = Math.max(maxY, p[1])
-  }
+  const maxY = Math.max(...pts.map((p) => p[1]))
   const sh = level.frame?.shiftY ?? 0
-  return { target: fromScreen((x0 + x1) / 2, (y0 + y1) / 2 + sh), w: x1 - x0, h: y1 - y0, minY, maxY }
+  const views: Record<number, ViewFrame> = {}
+  for (const v of [0, 90, 180, 270]) {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const p of pts) {
+      const [x, y] = screenAt(p, v)
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+    }
+    const cx = (x0 + x1) / 2
+    const cy = (y0 + y1) / 2 + sh
+    views[v] = { target: add(scale(rightAt(v), cx), scale(upAt(v), cy)), w: x1 - x0, h: y1 - y0 }
+  }
+  const f0 = views[0]
+  return { views, w: Math.max(...Object.values(views).map((f) => f.w)), h: Math.max(...Object.values(views).map((f) => f.h)), minY, maxY, target: f0.target }
+}
+
+/** Framing for a continuous view angle: blend the two neighbouring snapped views. */
+function frameAt(frame: Frame, view: number): ViewFrame {
+  const a = Math.floor(view / 90)
+  const t = view / 90 - a
+  const n = (k: number) => ((((k * 90) % 360) + 360) % 360)
+  const f0 = frame.views[n(a)]
+  const f1 = frame.views[n(a + 1)]
+  return { target: lerp3(f0.target, f1.target, t), w: f0.w + (f1.w - f0.w) * t, h: f0.h + (f1.h - f0.h) * t }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -111,6 +130,8 @@ function Marker({ pos, kind, born }: { pos: () => V3 | null; kind: 'go' | 'no' |
 
 // ---------------------------------------------------------------------------------------------
 
+let lastView = 0
+
 export function LevelView({ level }: { level: LevelDef }) {
   const pal = worldOf(level.id).palette
   const { camera, gl, size, scene, raycaster } = useThree()
@@ -140,6 +161,7 @@ export function LevelView({ level }: { level: LevelDef }) {
         st().clearHint()
       },
     })
+    if (useGame.getState().quick) w.easeViewFrom(lastView)
     return w
   }, [level])
 
@@ -159,6 +181,18 @@ export function LevelView({ level }: { level: LevelDef }) {
         return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]
       },
       handleAt: (id: string) => handleWorld(id),
+      /** Debug: what solid architecture is under a screen point. */
+      hitAt: (x: number, y: number) => {
+        raycaster.setFromCamera(ndc(x, y), camera)
+        const meshes: THREE.Object3D[] = []
+        scene.traverse((o) => o.userData.arch && (o as THREE.Mesh).isMesh && meshes.push(o))
+        const h = raycaster.intersectObjects(meshes, false)[0]
+        if (!h) return null
+        let o: THREE.Object3D | null = h.object
+        while (o && !o.userData.struct) o = o.parent
+        const g = (h.object as THREE.Mesh).geometry as THREE.BufferGeometry & { parameters?: unknown }
+        return { struct: o?.userData.struct, point: h.point.toArray(), pos: h.object.getWorldPosition(new THREE.Vector3()).toArray(), geo: g.parameters }
+      },
     }
     return () => {
       if (getWorld() === world) setWorld(null)
@@ -230,7 +264,7 @@ export function LevelView({ level }: { level: LevelDef }) {
         const sm = def.motion as Extract<typeof def.motion, { kind: 'slide' }>
         const zoom = (camera as THREE.OrthographicCamera).zoom
         const ds: [number, number] = [(ev.clientX - D.px) / zoom, -(ev.clientY - D.py) / zoom]
-        const a = screen(sm!.axis)
+        const a = screenAt(sm!.axis, world.view)
         const v = D.v0 + (ds[0] * a[0] + ds[1] * a[1]) / (a[0] * a[0] + a[1] * a[1])
         D.vel = Math.abs(v - world.values[D.id]) * 40
         world.drag(D.id, v)
@@ -265,6 +299,8 @@ export function LevelView({ level }: { level: LevelDef }) {
   useEffect(() => {
     const el = gl.domElement
     let down: { x: number; y: number; id: string | null; center: V3 | null } | null = null
+    // whole-world turning (drag on the sky or on fixed architecture)
+    let spin: { x0: number; v0: number; samples: { t: number; v: number }[] } | null = null
     const playing = () => {
       const g = useGame.getState()
       return g.screen === 'play' && !g.paused && g.phase === 'play'
@@ -273,9 +309,35 @@ export function LevelView({ level }: { level: LevelDef }) {
       raycaster.setFromCamera(ndc(x, y), camera)
       return raycaster.intersectObjects(archMeshes(), false)[0]
     }
+    const DEG_PER_PX = 0.42
+    const endSpin = () => {
+      if (!spin) return
+      // fling speed from the last ~100 ms of movement
+      const now = performance.now()
+      const recent = spin.samples.filter((s) => now - s.t < 110)
+      let vel = 0
+      if (recent.length >= 2) {
+        const a = recent[0]
+        const b = recent[recent.length - 1]
+        vel = ((b.v - a.v) / Math.max(16, b.t - a.t)) * 1000
+      }
+      world.releaseView(vel)
+      spin = null
+      document.body.style.cursor = ''
+      window.removeEventListener('pointermove', spinMove)
+      window.removeEventListener('pointerup', endSpin)
+      window.removeEventListener('pointercancel', endSpin)
+    }
+    const spinMove = (e: PointerEvent) => {
+      if (!spin) return
+      const v = spin.v0 - (e.clientX - spin.x0) * DEG_PER_PX
+      world.dragView(v)
+      spin.samples.push({ t: performance.now(), v })
+      if (spin.samples.length > 12) spin.samples.shift()
+    }
     const pd = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY, id: null, center: null }
-      if (drag.current || !playing()) return
+      if (drag.current || spin || !playing()) return
       // pressing on movable architecture: a drag turns/slides it, a tap still walks
       const h = hitAt(e.clientX, e.clientY)
       const id = h ? movableOf(h.object) : null
@@ -286,14 +348,27 @@ export function LevelView({ level }: { level: LevelDef }) {
       }
     }
     const pm = (e: PointerEvent) => {
-      if (down?.id && !drag.current && playing() && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
+      if (down && !drag.current && !spin && playing() && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
         const d = down
         down = null
-        beginDrag(d.id!, d.x, d.y, d.center!)
+        if (d.id) {
+          beginDrag(d.id, d.x, d.y, d.center!)
+          return
+        }
+        // nothing movable under the press: a sideways drag turns the whole world
+        if (Math.abs(e.clientX - d.x) >= Math.abs(e.clientY - d.y) * 0.6 && world.grabView()) {
+          useGame.getState().clearHint()
+          spin = { x0: d.x, v0: world.view, samples: [{ t: performance.now(), v: world.view }] }
+          document.body.style.cursor = 'grabbing'
+          window.addEventListener('pointermove', spinMove)
+          window.addEventListener('pointerup', endSpin)
+          window.addEventListener('pointercancel', endSpin)
+          spinMove(e)
+        }
         return
       }
       // hover affordance: show a grab cursor over anything that moves
-      if (!down && !drag.current && e.buttons === 0 && playing()) {
+      if (!down && !drag.current && !spin && e.buttons === 0 && playing()) {
         const h = hitAt(e.clientX, e.clientY)
         const id = h ? movableOf(h.object) : null
         if (id) document.body.style.cursor = 'grab'
@@ -302,7 +377,7 @@ export function LevelView({ level }: { level: LevelDef }) {
     }
     const pu = (e: PointerEvent) => {
       const g = useGame.getState()
-      if (!down || drag.current || !playing()) return (down = null)
+      if (!down || drag.current || spin || !playing()) return (down = null)
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return (down = null)
       down = null
       const k = pick(e.clientX, e.clientY)
@@ -311,6 +386,14 @@ export function LevelView({ level }: { level: LevelDef }) {
       tap.current = { key: k, kind: ok ? 'go' : 'no', born: performance.now() }
       if (ok) g.clearHint()
     }
+    const key = (e: KeyboardEvent) => {
+      if (!playing()) return
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (world.turnView(e.key === 'ArrowLeft' ? -1 : 1)) useGame.getState().clearHint()
+      }
+    }
+    window.addEventListener('keydown', key)
     el.addEventListener('pointerdown', pd)
     el.addEventListener('pointermove', pm)
     el.addEventListener('pointerup', pu)
@@ -318,6 +401,8 @@ export function LevelView({ level }: { level: LevelDef }) {
       el.removeEventListener('pointerdown', pd)
       el.removeEventListener('pointermove', pm)
       el.removeEventListener('pointerup', pu)
+      window.removeEventListener('keydown', key)
+      endSpin()
     }
   })
 
@@ -345,11 +430,11 @@ export function LevelView({ level }: { level: LevelDef }) {
     // fallback: nearest tile centre on screen
     const ray = raycaster.ray
     const o: V3 = [ray.origin.x, ray.origin.y, ray.origin.z]
-    const [sx, sy] = screen(o)
+    const [sx, sy] = screenAt(o, world.view)
     let best: string | null = null
     let bd = 0.5
     for (const n of nodes) {
-      const [cx, cy] = screen(world.liveCenter(n.key))
+      const [cx, cy] = screenAt(world.liveCenter(n.key), world.view)
       const d = Math.hypot(cx - sx, cy - sy)
       if (d < bd) (bd = d), (best = n.key)
     }
@@ -371,6 +456,7 @@ export function LevelView({ level }: { level: LevelDef }) {
         const m = st.motion
         if (m?.kind === 'rotate' && m.driver.kind === 'wheel') world.values[st.id] = m.start + Math.sin(s.clock.elapsedTime * 0.35) * 70
       }
+      world.view = (level.startView ?? 0) + Math.sin(s.clock.elapsedTime * 0.22) * 28
     } else if (!g.paused) world.update(dt)
 
     // intro: materialise
@@ -402,24 +488,26 @@ export function LevelView({ level }: { level: LevelDef }) {
     }
     U.uReveal.value = T.reveal
 
-    // camera: fixed isometric orientation; framing eases in on intro and lifts away on outro
+    // camera: always an isometric diagonal; it orbits the monument as the world view turns
     const cam = camera as THREE.OrthographicCamera
     const pad = level.frame?.pad ?? 1.12
     const top = 64
     const bottom = 70
-    const availH = Math.max(100, size.height - top - bottom)
     const title = g.screen !== 'play'
-    const zoom = Math.min(size.width / (frame.w * pad), availH / (frame.h * pad)) * (level.frame?.zoom ?? 1) * (title ? 0.74 : 1)
+    const view = world.view
+    const vf = frameAt(frame, view)
+    const availH = Math.max(100, size.height - top - bottom)
+    const zoom = Math.min(size.width / (vf.w * pad), availH / (vf.h * pad)) * (level.frame?.zoom ?? 1) * (title ? 0.74 : 1)
     const lift = (1 - T.reveal) * (g.phase === 'outro' ? 2.2 : -1.6)
-    // on the title screen the structure sits a little lower and smaller, under the title
     const shiftPx = (bottom - top) / 2 / zoom - (title ? (size.height * 0.1) / zoom : 0)
-    const target = add(frame.target, scale(UP, lift - shiftPx))
+    const target = add(vf.target, scale(upAt(view), lift - shiftPx))
     cam.zoom += (zoom - cam.zoom) * (cam.zoom === 1 ? 1 : Math.min(1, dt * 4))
-    const pos = add(target, scale(VIEW, 60))
+    const pos = add(target, scale(viewAt(view), 60))
     cam.position.set(pos[0], pos[1], pos[2])
     cam.up.set(0, 1, 0)
     cam.lookAt(target[0], target[1], target[2])
     cam.updateProjectionMatrix()
+    lastView = view
   })
 
   const active = () => drag.current?.id ?? null
@@ -435,7 +523,7 @@ export function LevelView({ level }: { level: LevelDef }) {
       <Marker key={tap.current.born} kind={tap.current.kind} born={tap.current.born} pos={() => (tap.current.key ? world.liveCenter(tap.current.key) : null)} />
       {hint?.tile && <Marker kind="hint" born={0} pos={() => world.liveCenter(hint.tile!)} />}
       <JointFlash world={world} flash={flash} />
-      <Lights frame={frame} />
+      <Lights frame={frame} world={world} />
     </group>
   )
 }
@@ -488,23 +576,28 @@ function JointFlash({ world, flash }: { world: World; flash: React.MutableRefObj
   )
 }
 
-function Lights({ frame }: { frame: Frame }) {
+function Lights({ frame, world }: { frame: Frame; world: World }) {
   const quality = useGame((s) => s.save.settings.quality)
   const dir = useRef<THREE.DirectionalLight>(null!)
   const L: V3 = [0.42, 1, 0.68]
   useEffect(() => {
     const d = dir.current
-    const t = frame.target
-    const k = 30
-    d.position.set(t[0] + L[0] * k, t[1] + L[1] * k, t[2] + L[2] * k)
-    d.target.position.set(t[0], t[1], t[2])
-    d.target.updateMatrixWorld()
     const ext = Math.max(frame.w, frame.h) * 0.75 + 2
     const c = d.shadow.camera
     c.left = -ext; c.right = ext; c.top = ext; c.bottom = -ext; c.near = 1; c.far = 80
     c.updateProjectionMatrix()
-    d.shadow.needsUpdate = true
   }, [frame])
+  // the light turns with the camera so every view keeps the same face tones
+  useFrame(() => {
+    const d = dir.current
+    const vf = frameAt(frame, world.view)
+    const t = vf.target
+    const l = rotV(L, world.view)
+    const k = 30
+    d.position.set(t[0] + l[0] * k, t[1] + l[1] * k, t[2] + l[2] * k)
+    d.target.position.set(t[0], t[1], t[2])
+    d.target.updateMatrixWorld()
+  })
   const res = quality === 'high' ? 2048 : 1024
   return (
     <>

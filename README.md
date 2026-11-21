@@ -30,6 +30,15 @@ npm run build      # static site in app/dist
 Deploy on Vercel or Netlify with **root directory `app`**, build command `npm run build` and output
 directory `dist`.
 
+## Two ways to turn things
+
+* **Turn a tower:** drag its wheel, or press on the tower and drag round. The whole tower turns
+  and carries the traveller with it.
+* **Turn the whole world:** drag sideways across the sky (or across fixed architecture), or use
+  the ← → keys. The camera orbits the monument and settles at the four isometric views
+  (0°, 90°, 180°, 270°), with a little momentum on release. A world turn never changes any
+  tower's or platform's own state.
+
 ## How the impossible paths work
 
 The camera always looks down the (−1, −1, −1) diagonal, which is a true isometric projection. Every
@@ -46,6 +55,12 @@ graph every time the architecture settles:
 
 Crossing a perspective edge moves the traveller along the view diagonal at the joint, which is
 invisible on screen. Arbitrary overlaps never connect: only pairs a level lists can.
+
+Each world view looks down its own diagonal: (1,1,1), (1,1,−1), (−1,1,−1) or (−1,1,1). The
+perspective check always uses the current one, so a joint can exist when you look from one side
+of the monument and not from another. While the world (or a piece) is still turning, no
+perspective edges exist. A traveller halfway across a joint can't have the world turned under
+them, and standing tiles are never moved by a world turn, so nobody is ever stranded.
 
 ## Authoring a level
 
@@ -76,13 +91,17 @@ Every level has three phases: an easy discovery, a medium alignment (turn a whol
 paths line up on screen), and a hard combined puzzle. The hard phase moves a platform, walks
 somewhere else, and turns a tower again so the first joint breaks and a new one forms.
 
-* **Level 01:** slide the bridge onto the tower. Ride the tower to 270° so its stair head meets
-  the far walkway, then cross. Push the top platform, turn the tower back to 0° so the door
-  balcony meets the platform, then cross to the exit.
-* **Level 02:** slide the bridge onto the first tower. Ride it to 180° to meet the second tower,
-  then cross. Ride the second tower to 90° so its top meets a lift far behind the first tower,
-  then cross. Raise the lift, go back to the first tower and turn it to 90°, then cross to the
-  door balcony.
+* **Level 01:**
+  * Turn the world to 90°: the low start island meets the tower's walk. Walk on.
+  * Ride the tower to 270°, then turn the world back to 0°: the stair head meets the far
+    walkway. Cross.
+  * Push the top platform and turn the tower back to 0°: the door balcony meets it. Exit.
+* **Level 02:**
+  * Slide the bridge to reach the first tower.
+  * Ride the first tower to 180° to meet the second tower. Cross.
+  * Ride the second tower to 180° so its top meets the lift. Cross.
+  * Raise the lift two storeys, and turn the first tower to 90°.
+  * Turn the world to 180° to look from the far side: the balcony meets the lift. Exit.
 
 `scripts/analyze.ts` prints every joint at every rotation state and the shortest solution:
 `npx vite-node scripts/analyze.ts 1`.
@@ -90,7 +109,8 @@ somewhere else, and turns a tower again so the first joint breaks and a new one 
 The tests check:
 
 * each joint forms only at its designed angles;
-* the shortest solution needs at least two tower turns and two platform moves;
+* the shortest solution needs at least one world turn, two tower turns and a platform move;
+* joints are checked at every combination of world view and tower and platform state;
 * no reachable state can trap the traveller.
 
 ## Controls

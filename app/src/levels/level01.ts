@@ -6,7 +6,9 @@ import { BOTTOM, box, column, door, finial, roof, stairTile, stairs, tile, win }
 // A whole tower turns on its pillar: walkway, stairs, landing, the tall pier and the gate
 // house with the exit door all turn together.
 //
-//  A  (easy)   Slide the little bridge in. Walk onto the tower's south walk.
+//  A  (easy)   The start island sits two storeys below the tower's walk. Turn the WHOLE WORLD a
+//              quarter turn (view 90°): seen from the new side, the island's edge (−2,−2,4.5) runs
+//              into the tower walk's end (0,0,2.5) along that view's diagonal (1,1,−1). Walk on.
 //  B  (medium) Ride the tower round to 270°. The top of its stairs (2.5,1,0) now lines up on
 //              screen with the far walkway (4.5,3,2) — two storeys higher, two cells nearer.
 //              Cross.
@@ -23,44 +25,31 @@ export const level01: LevelDef = {
   world: 1,
   start: 'S:s0',
   links: [
+    ['S:s1', 'T:p2'],
     ['T:u', 'W:w0'],
     ['T:h', 'P:m'],
   ],
   structures: [
     {
+      // the start: a low island two storeys beneath the tower's walk, out of reach — until the
+      // world is turned and, seen from the new side, its edge runs straight into the tower
       id: 'S',
       origin: [0, 0, 0],
-      tiles: [tile('s0', 0, 0, 5), tile('s1', 0, 0, 4)],
+      tiles: [tile('s0', -2, -2, 6), tile('s1', -2, -2, 5)],
       parts: [
-        column(0, 4.5, 0, 'stone', BOTTOM, 1, 2),
-        box([-0.62, BOTTOM, 3.88], [0.62, -1.4, 5.62], 'warm'),
-        box([-0.62, -1.4, 3.88], [0.62, -1.26, 5.62], 'stone'),
-        { kind: 'inlay', at: [0, 0, 5], size: 0.56, c: 'warm' },
-        box([-0.5, 0, 4.43], [-0.36, 1.02, 4.57], 'stone'),
-        box([0.36, 0, 4.43], [0.5, 1.02, 4.57], 'stone'),
-        box([-0.54, 1.02, 4.4], [0.54, 1.2, 4.6], 'warm'),
-        ...finial(0, 1.2, 4.5),
-        win([0.5, -0.9, 4.5], 'E', 0.14, 0.4),
-        win([0.5, -2.7, 5.1], 'E', 0.14, 0.5),
+        column(-2, 5.5, -2, 'stone', BOTTOM, 1, 2),
+        box([-2.62, BOTTOM, 4.88], [-1.38, -3.4, 6.62], 'warm'),
+        box([-2.62, -3.4, 4.88], [-1.38, -3.26, 6.62], 'stone'),
+        { kind: 'inlay', at: [-2, -2, 6], size: 0.56, c: 'warm' },
+        box([-2.5, -2, 5.43], [-2.36, -0.98, 5.57], 'stone'),
+        box([-1.64, -2, 5.43], [-1.5, -0.98, 5.57], 'stone'),
+        box([-2.54, -0.98, 5.4], [-1.46, -0.8, 5.6], 'warm'),
+        ...finial(-2, -0.8, 5.5),
+        win([-1.5, -2.9, 5.5], 'E', 0.14, 0.4),
+        win([-2, -2.9, 6.5], 'S', 0.14, 0.4),
+        win([-2.5, -2.9, 5.5], 'W', 0.14, 0.4),
+        win([-2, -3.2, 4.5], 'N', 0.14, 0.5),
       ],
-    },
-    {
-      // the little bridge: slides one cell east to join the start to the tower
-      id: 'B',
-      origin: [-1, 0, 3],
-      motion: { kind: 'slide', axis: [1, 0, 0], stops: [0, 1], start: 0, driver: { kind: 'grip', at: [0, -0.16, 0.5], face: 'S' } },
-      tiles: [tile('b', 0, 0, 0)],
-      parts: [
-        box([-0.5, -0.3, -0.5], [0.5, 0, 0.5], 'accent'),
-        box([-0.4, -0.42, -0.4], [0.4, -0.3, 0.4], 'warm'),
-        { kind: 'inlay', at: [0, 0, 0], size: 0.46, c: 'stone' },
-      ],
-    },
-    {
-      id: 'Brail',
-      origin: [0, 0, 0],
-      tiles: [],
-      parts: [box([-1.55, -0.56, 2.86], [0.55, -0.44, 3.14], 'stone')],
     },
     {
       // THE TOWER — everything here turns as one piece
@@ -157,9 +146,12 @@ export const level01: LevelDef = {
     },
   ],
   hints: [
-    { text: 'Slide the little bridge into place, then walk onto the tower.', target: 'B', done: (s) => [...s.visited].some((k) => k.startsWith('T:')) },
     {
-      text: 'Stand on the tower and turn it. The whole tower turns. Watch the top of its stairs.',
+      text: 'Drag across the sky to turn the whole world. Watch where your island meets the tower.',
+      done: (s) => [...s.visited].some((k) => k.startsWith('T:')),
+    },
+    {
+      text: 'Stand on the tower and turn it with its wheel. Then turn the world back to see where the top of the stairs meets.',
       target: 'T',
       done: (s) => s.visited.has('W:w0'),
     },

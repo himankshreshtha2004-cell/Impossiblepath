@@ -1,6 +1,6 @@
 import type { LevelDef, StructureDef, V3 } from './types'
 import { DIRV } from './types'
-import { add, len, lerp3, scale, sub } from './iso'
+import { VIEWS, add, len, lerp3, normDeg, scale, sub } from './iso'
 import {
   apply, applyDir, buildGraph, edgeBetween, findPath, structureMap, tileCPsLocal, tileCenterLocal, worldTransform,
   type Edge, type Graph,
@@ -16,6 +16,8 @@ export interface WorldEvents {
   arrive?: (node: string) => void
   exit?: () => void
   refused?: (id: string) => void
+  /** The whole world settled at a new view. */
+  viewSnap?: (view: number) => void
 }
 
 interface Anim { from: number; to: number; t: number; dur: number; kind: 'snap' | 'transform' }
@@ -52,6 +54,10 @@ export class World {
   values: Record<string, number> = {}
   anims: Record<string, Anim> = {}
   dragging: string | null = null
+  // whole-world view (degrees; continuous while turning, a multiple of 90 when settled)
+  view = 0
+  viewDragging = false
+  viewAnim: Anim | null = null
   flags = new Set<string>()
   visited = new Set<string>()
   graph: Graph
@@ -75,6 +81,7 @@ export class World {
     this.map = structureMap(level)
     this.events = events
     for (const s of level.structures) if (s.motion) this.values[s.id] = s.motion.start
+    this.view = level.startView ?? 0
     this.node = level.start
     this.visited.add(this.node)
     this.graph = this.rebuild(true)
@@ -98,8 +105,19 @@ export class World {
     return p ? this.under(p, anc) : false
   }
 
+  /** The snapped view, or null while the world is turning. */
+  settledView(): number | null {
+    if (this.viewDragging || this.viewAnim) return null
+    const n = normDeg(this.view)
+    return Math.abs(this.view - Math.round(this.view)) < 1e-6 && n % 90 === 0 ? n : null
+  }
+
+  viewStops() {
+    return this.level.views ?? VIEWS
+  }
+
   rebuild(silent = false): Graph {
-    this.graph = buildGraph(this.level, this.values, this.isSettled)
+    this.graph = buildGraph(this.level, this.values, this.isSettled, this.settledView())
     const now = new Set<string>()
     for (const e of this.graph.edges) if (e.kind === 'illusion') {
       const k = [e.a, e.b].sort().join('|')
@@ -166,6 +184,84 @@ export class World {
       this.events.snap?.(id)
       this.rebuild()
     }
+  }
+
+  // ---- whole-world turning ------------------------------------------------------------------
+
+  /** The world can turn unless the traveller is mid-way across a perspective joint. */
+  canGrabView() {
+    if (this.done || this.leaving >= 0) return false
+    return !(this.edge && this.edge.kind === 'illusion')
+  }
+
+  grabView(): boolean {
+    if (!this.canGrabView()) {
+      this.events.refused?.('world')
+      return false
+    }
+    // finish the current step, forget the rest of the route (it may rely on this view)
+    this.path = []
+    this.viewDragging = true
+    this.viewAnim = null
+    this.rebuild()
+    return true
+  }
+
+  dragView(deg: number) {
+    if (!this.viewDragging) return
+    if (Math.floor(this.view / 15) !== Math.floor(deg / 15)) this.events.tick?.('world')
+    this.view = deg
+  }
+
+  /** Let go: carry on a little with the fling's momentum, then ease into the nearest allowed view. */
+  releaseView(velocity = 0) {
+    if (!this.viewDragging) return
+    this.viewDragging = false
+    const projected = this.view + Math.max(-120, Math.min(120, velocity * 0.18))
+    const stops = this.viewStops()
+    let best = this.view
+    let bd = Infinity
+    for (const st of stops) {
+      const c = st + 360 * Math.round((projected - st) / 360)
+      const d = Math.abs(c - projected)
+      if (d < bd) (bd = d), (best = c)
+    }
+    const dist = Math.abs(best - this.view) / 90
+    if (dist < 1e-6) {
+      this.view = best
+      this.events.viewSnap?.(normDeg(best))
+      this.rebuild()
+      return
+    }
+    this.viewAnim = { from: this.view, to: best, t: 0, dur: 0.35 + 0.35 * Math.min(1.5, dist), kind: 'snap' }
+  }
+
+  /** Turn the world a quarter turn left (−1) or right (+1), e.g. from the keyboard. */
+  turnView(dir: 1 | -1): boolean {
+    if (!this.canGrabView() || this.viewDragging) return false
+    this.path = []
+    const base = this.viewAnim ? this.viewAnim.to : Math.round(this.view / 90) * 90
+    this.viewAnim = { from: this.view, to: base + dir * 90, t: 0, dur: 0.75, kind: 'snap' }
+    this.rebuild()
+    return true
+  }
+
+  /** Start from another view and ease to the level's view (smooth hand-over from the title screen). */
+  easeViewFrom(deg: number) {
+    const to = this.level.startView ?? 0
+    const from = to + ((((deg - to) % 360) + 540) % 360) - 180
+    if (Math.abs(from - to) < 0.5) return
+    this.view = from
+    this.viewAnim = { from, to, t: 0, dur: 0.9, kind: 'snap' }
+    this.rebuild()
+  }
+
+  /** Puzzle-level jump of the world view (tests / debug). */
+  setView(deg: number) {
+    this.view = deg
+    this.viewAnim = null
+    this.viewDragging = false
+    this.rebuild()
   }
 
   /** Puzzle-level jump used by tests and the debug solver. */
@@ -284,6 +380,17 @@ export class World {
         if (a.kind === 'snap') this.events.snap?.(id)
       }
     }
+    if (this.viewAnim) {
+      const a = this.viewAnim
+      a.t = Math.min(1, a.t + dt / a.dur)
+      this.view = a.from + (a.to - a.from) * easeOut(a.t)
+      if (a.t >= 1) {
+        this.view = a.to
+        this.viewAnim = null
+        changed = true
+        this.events.viewSnap?.(normDeg(a.to))
+      }
+    }
     if (changed) this.rebuild()
 
     // riding: a turning structure turns the traveller with it
@@ -334,6 +441,6 @@ export class World {
   }
 
   puzzleState() {
-    return { values: { ...this.values }, flags: new Set(this.flags), node: this.node, visited: new Set(this.visited) }
+    return { values: { ...this.values }, view: this.settledView() ?? normDeg(this.view), flags: new Set(this.flags), node: this.node, visited: new Set(this.visited) }
   }
 }
