@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Email confirmed</title>
+<meta name="robots" content="noindex" />
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #2f3a3a;
+    background: radial-gradient(120% 90% at 0% 0%, #d9ebe2 0%, transparent 55%), radial-gradient(120% 90% at 100% 100%, #2a2650 0%, transparent 60%), linear-gradient(135deg, #cfe3da, #5b5590); }
+  .card { width: min(560px, 100%); background: rgba(255, 252, 245, .94); border-radius: 26px; padding: 34px 30px 28px;
+    box-shadow: 0 30px 90px -30px rgba(20, 18, 50, .55); text-align: center; }
+  .tick { width: 54px; height: 54px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center; background: #dcefe4; color: #2f7d55; font-size: 28px; }
+  .tick.warn { background: #f7e6d8; color: #b05a2a; }
+  h1 { font: 400 30px/1.2 Georgia, "Times New Roman", serif; margin: 0 0 8px; }
+  p { margin: 0 auto 22px; max-width: 420px; color: #55605f; }
+  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  a.game { display: flex; flex-direction: column; gap: 6px; padding: 20px 16px; border-radius: 18px; text-decoration: none; color: inherit;
+    border: 1px solid rgba(0, 0, 0, .08); transition: transform .2s, box-shadow .2s; }
+  a.game:hover, a.game:focus-visible { transform: translateY(-2px); box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .45); outline: none; }
+  a.ip { background: linear-gradient(160deg, #e9f2ec, #f6ead9); }
+  a.pu { background: linear-gradient(160deg, #262246, #3b3470); color: #fff7ea; }
+  .name { font: 400 21px/1.2 Georgia, serif; }
+  .sub { font-size: 13px; opacity: .75; }
+  .go { margin-top: 6px; font-size: 13px; font-weight: 600; }
+  .note { margin: 20px auto 0; font-size: 12.5px; opacity: .7; }
+  @media (max-width: 460px) { .games { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="tick" id="tick">✓</div>
+    <h1 id="title">Your email is confirmed</h1>
+    <p id="text">Your account works in both games. Choose where to go — then open <b>Cloud save</b> and sign in with your email and password.</p>
+    <div class="games">
+      <a class="game ip" href="https://endlessuniverse-kmg9.vercel.app/">
+        <span class="name">The Impossible Path</span>
+        <span class="sub">An architectural puzzle — 50 levels</span>
+        <span class="go">Open game →</span>
+      </a>
+      <a class="game pu" href="https://pocket-universe-sable.vercel.app/">
+        <span class="name">Pocket Universe</span>
+        <span class="sub">A whole world, made by you</span>
+        <span class="go">Open game →</span>
+      </a>
+    </div>
+    <p class="note">Your progress in each game is saved separately, under the same account.</p>
+  </main>
+  <script>
+    // Supabase adds the result after "#". An expired or already-used link shows a gentler message.
+    try {
+      var h = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+      if (h.get("error") || h.get("error_code")) {
+        document.getElementById("tick").textContent = "!";
+        document.getElementById("tick").className = "tick warn";
+        document.getElementById("title").textContent = "This link has already been used or has expired";
+        document.getElementById("text").innerHTML = "If you've already confirmed your email, just open a game and sign in. Otherwise create the account again to get a fresh email.";
+      }
+      // don't leave sign-in tokens in the address bar
+      if (location.hash) history.replaceState(null, "", location.pathname);
+    } catch (e) {}
+  </script>
+</body>
+</html>
