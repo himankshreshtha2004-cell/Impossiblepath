@@ -163,3 +163,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .cloud-email { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cloud-st.synced { color: #3f8f62; }
 .cloud-st.error { color: var(--accent); }
+
+.cloud-method { margin-bottom: 10px; }
+.cloud-method button { padding: 8px 10px; font-size: 13px; text-transform: none; }
+.cloud-form input:disabled { opacity: .6; }
+.cloud-form .link { align-self: center; }
