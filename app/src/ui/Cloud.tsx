@@ -1,0 +1,72 @@
+import { useEffect, useState } from 'react'
+import { create } from 'zustand'
+import { cloud, cloudConfigured, runSync, signIn, signOut, signUp, type CloudState } from '../cloud/cloud'
+
+export const useCloudUI = create<{ open: boolean }>(() => ({ open: false }))
+export const openCloud = (open = true) => useCloudUI.setState({ open })
+
+export function useCloud(): CloudState {
+  const [s, setS] = useState(cloud.state)
+  useEffect(() => cloud.subscribe(setS), [])
+  return s
+}
+
+export function cloudLine(s: CloudState): string {
+  if (s.status === 'off') return 'Off'
+  if (s.status === 'signed-out') return 'Not signed in'
+  if (s.status === 'syncing') return 'Syncing…'
+  if (s.status === 'error') return 'Not synced'
+  const secs = Math.round((Date.now() - s.lastSync) / 1000)
+  return 'Synced ' + (secs < 10 ? 'just now' : secs < 3600 ? Math.max(1, Math.round(secs / 60)) + ' min ago' : 'earlier')
+}
+
+export function CloudSheet() {
+  const s = useCloud()
+  const open = useCloudUI((u) => u.open)
+  const [mode, setMode] = useState<'in' | 'up'>('in')
+  const [email, setEmail] = useState('')
+  const [pw, setPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  if (!open || !cloudConfigured) return null
+  const close = () => { openCloud(false); setMsg('') }
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true); setMsg('')
+    const m = mode === 'in' ? await signIn(email, pw) : await signUp(email, pw)
+    setBusy(false); setMsg(m)
+    if (!m) setPw('')
+  }
+  return (
+    <div className="sheet-wrap" onClick={close}>
+      <div className="sheet cloudsave fade-in" onClick={(e) => e.stopPropagation()}>
+        <h3>Cloud save</h3>
+        <p className="cloud-note">One account keeps your progress in <b>The Impossible Path</b> and <b>Pocket Universe</b>, on any device.</p>
+        {s.email ? (
+          <>
+            <div className="row"><span>Signed in as</span><b className="cloud-email">{s.email}</b></div>
+            <div className="row"><span>Status</span><span className={'cloud-st ' + s.status}>{cloudLine(s)}</span></div>
+            {s.status === 'error' && s.message && <p className="cloud-msg">{s.message}</p>}
+            <div className="cloud-actions">
+              <button onClick={() => runSync()} disabled={s.status === 'syncing'}>Sync now</button>
+              <button onClick={() => signOut()}>Sign out</button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={submit} className="cloud-form">
+            <div className="seg cloud-tabs">
+              <button type="button" className={mode === 'in' ? 'on' : ''} onClick={() => { setMode('in'); setMsg('') }}>Sign in</button>
+              <button type="button" className={mode === 'up' ? 'on' : ''} onClick={() => { setMode('up'); setMsg('') }}>Create account</button>
+            </div>
+            <input type="email" required autoComplete="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" required minLength={6} autoComplete={mode === 'in' ? 'current-password' : 'new-password'} placeholder={mode === 'in' ? 'Password' : 'Choose a password (6+ characters)'} value={pw} onChange={(e) => setPw(e.target.value)} />
+            {msg && <p className="cloud-msg">{msg}</p>}
+            <button type="submit" className="cloud-go" disabled={busy}>{busy ? 'One moment…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
+            <p className="cloud-small">Your progress on this device is kept and combined with the cloud copy — nothing is lost.</p>
+          </form>
+        )}
+        <button className="done" onClick={close}>Done</button>
+      </div>
+    </div>
+  )
+}

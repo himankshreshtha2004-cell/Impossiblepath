@@ -164,3 +164,19 @@ describe('every built level', () => {
     })
   }
 })
+
+import { mergeProgress } from '../state/game'
+describe('cloud progress merge', () => {
+  it('keeps everything finished on either device', () => {
+    const m = mergeProgress({ unlocked: 6, completed: [1, 2, 3, 4, 5], current: 6 }, { unlocked: 3, completed: [1, 2, 7], current: 3 })
+    expect(m.completed).toEqual([1, 2, 3, 4, 5, 7]); expect(m.unlocked).toBe(6); expect(m.current).toBe(6)
+  })
+  it('a newer New Game wins over older progress', () => {
+    const m = mergeProgress({ unlocked: 1, completed: [], current: 1, resetAt: 200 }, { unlocked: 20, completed: [1, 2, 3], current: 20, resetAt: 100 })
+    expect(m.unlocked).toBe(1); expect(m.completed).toEqual([])
+  })
+  it('works with no cloud copy yet', () => {
+    const a = { unlocked: 4, completed: [1, 2, 3], current: 4 }
+    expect(mergeProgress(a, null)).toBe(a)
+  })
+})

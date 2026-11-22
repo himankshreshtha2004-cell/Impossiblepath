@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { CloudSheet, cloudLine, openCloud, useCloud, useCloudUI } from './Cloud'
+import { cloudConfigured } from '../cloud/cloud'
 import { useGame, getWorld } from '../state/game'
 import { LEVELS, WORLDS, ROMAN, levelInfo, type LevelInfo } from '../levels/catalog'
 import { initAudio, sfx } from '../audio/sound'
@@ -24,6 +26,7 @@ function Title() {
         <button onClick={begin(() => (hasProgress ? st.newGame() : st.startLevel(1)))}>{hasProgress ? 'New Game' : 'Begin'}</button>
         <button onClick={begin(() => st.go('chapters'))}>Chapters</button>
         <button onClick={begin(() => st.openSettings(true))}>Settings</button>
+        {cloudConfigured && <button onClick={() => openCloud()}>Cloud save</button>}
       </nav>
     </div>
   )
@@ -116,8 +119,19 @@ function SettingsPanel() {
           <span>Reduce motion</span>
           <input type="checkbox" checked={s.reducedMotion} onChange={(e) => st.updateSettings({ reducedMotion: e.target.checked })} />
         </label>
+        {cloudConfigured && <CloudRow />}
         <button className="done" onClick={() => st.openSettings(false)}>Done</button>
       </div>
+    </div>
+  )
+}
+
+function CloudRow() {
+  const c = useCloud()
+  return (
+    <div className="row">
+      <span>Cloud save</span>
+      <button className="cloud-open" onClick={() => openCloud()}>{c.email ? cloudLine(c) : 'Sign in'}</button>
     </div>
   )
 }
@@ -261,6 +275,7 @@ function EndCard() {
 }
 
 export function Overlay() {
+  const cloudOpen = useCloudUI((u) => u.open)
   const st = useGame()
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -276,11 +291,12 @@ export function Overlay() {
   if (typeof location !== 'undefined' && location.search.includes('clean')) return null
   return (
     <div className="overlay">
-      {st.screen === 'title' && !st.settingsOpen && <Title />}
+      {st.screen === 'title' && !st.settingsOpen && !cloudOpen && <Title />}
       {st.screen === 'chapters' && <Chapters />}
       <Hud />
       {st.screen === 'play' && st.paused && !st.settingsOpen && <Pause />}
       {st.settingsOpen && <SettingsPanel />}
+      <CloudSheet />
     </div>
   )
 }

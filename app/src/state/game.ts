@@ -4,10 +4,11 @@ import { liveGuide, type LiveGuide } from '../ui/guide'
 import type { World } from '../engine/world'
 import { BUILT } from '../levels'
 import { setVolumes } from '../audio/sound'
+import { onCloudSession, pull, push } from '../cloud/cloud'
 
 export type Quality = 'low' | 'balanced' | 'high'
 export interface Settings { music: number; sfx: number; quality: Quality; reducedMotion: boolean }
-export interface Save { unlocked: number; completed: number[]; current: number; settings: Settings }
+export interface Save { unlocked: number; completed: number[]; current: number; settings: Settings; /** when "New Game" last wiped progress — a newer reset on another device wins */ resetAt?: number }
 
 const KEY = 'impossible-path-save-v1'
 const DEFAULT: Save = { unlocked: 1, completed: [], current: 1, settings: { music: 0.6, sfx: 0.8, quality: 'balanced', reducedMotion: false } }
@@ -22,12 +23,26 @@ function load(): Save {
     return structuredClone(DEFAULT)
   }
 }
-function persist(s: Save) {
+function persist(s: Save, toCloud = true) {
   try {
     localStorage.setItem(KEY, JSON.stringify(s))
   } catch {
     /* private mode */
   }
+  // progress (not the per-device settings) is copied to the cloud when the player is signed in
+  if (toCloud) push(CLOUD_APP, 'save', { unlocked: s.unlocked, completed: s.completed, current: s.current, resetAt: s.resetAt ?? 0 })
+}
+const CLOUD_APP = 'impossible-path'
+type Progress = Pick<Save, 'unlocked' | 'completed' | 'current'> & { resetAt?: number }
+/** combine this device's progress with the cloud copy: nothing finished anywhere is lost */
+export function mergeProgress(a: Progress, b: Progress | null): Progress {
+  if (!b) return a
+  const ra = a.resetAt ?? 0, rb = b.resetAt ?? 0
+  if (ra !== rb) return ra > rb ? a : b // a "New Game" started later replaces older progress
+  const completed = [...new Set([...(a.completed || []), ...(b.completed || [])])].filter((n) => n >= 1 && n <= 50).sort((x, y) => x - y)
+  const unlocked = Math.min(50, Math.max(a.unlocked || 1, b.unlocked || 1))
+  const pick = (b.completed?.length || 0) > (a.completed?.length || 0) ? b : a
+  return { unlocked, completed, current: Math.min(unlocked, pick.current || 1), resetAt: ra }
 }
 
 export type Screen = 'title' | 'chapters' | 'play'
@@ -135,10 +150,22 @@ export const useGame = create<Game>((set, get) => {
         set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length, live })
     },
     newGame: () => {
-      const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1 }
+      const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1, resetAt: Date.now() }
       persist(s)
       set({ save: s })
       get().startLevel(1)
     },
   }
+})
+
+// when the player is signed in (on load or after signing in), bring this device and the cloud in line
+onCloudSession(async () => {
+  const rows = await pull(CLOUD_APP)
+  const remote = rows.find((r) => r.key === 'save' && !r.deleted)?.data as Progress | undefined
+  const local = useGame.getState().save
+  const m = mergeProgress(local, remote ?? null)
+  const ns: Save = { ...local, ...m }
+  const same = (x: Progress | undefined) => !!x && x.unlocked === m.unlocked && x.current === m.current && (x.resetAt ?? 0) === (m.resetAt ?? 0) && JSON.stringify([...(x.completed || [])].sort((p, q) => p - q)) === JSON.stringify(m.completed)
+  if (!same(local)) { persist(ns, false); useGame.setState({ save: ns }) }
+  if (!same(remote)) push(CLOUD_APP, 'save', { unlocked: m.unlocked, completed: m.completed, current: m.current, resetAt: m.resetAt ?? 0 })
 })

@@ -143,3 +143,23 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .guide .dots { margin-top: 7px; }
   .hint-pill { padding: 0 12px 0 11px; font-size: 12px; }
 }
+
+/* cloud save */
+.sheet.cloudsave { width: min(380px, 92vw); }
+.cloud-note { margin: -6px 0 8px; font-size: 13.5px; line-height: 1.5; opacity: .78; }
+.cloud-form { display: flex; flex-direction: column; gap: 9px; }
+.cloud-tabs { align-self: stretch; display: flex; }
+.cloud-tabs button { flex: 1; }
+.cloud-form input { padding: 11px 13px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--deep) 16%, transparent); background: color-mix(in srgb, white 55%, transparent); font: inherit; font-size: 14px; color: var(--deep); }
+.cloud-form input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.cloud-go, .cloud-actions button, .cloud-open { padding: 10px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--deep) 14%, transparent); background: color-mix(in srgb, var(--warm) 45%, transparent); font: inherit; font-size: 14px; letter-spacing: .03em; cursor: pointer; color: var(--deep); }
+.cloud-go { background: var(--accent); color: white; border-color: transparent; }
+.cloud-go:disabled, .cloud-actions button:disabled { opacity: .55; cursor: default; }
+.cloud-open { padding: 6px 12px; font-size: 13px; }
+.cloud-actions { display: flex; gap: 8px; margin-top: 6px; }
+.cloud-actions button { flex: 1; }
+.cloud-msg { margin: 2px 0; font-size: 13px; line-height: 1.45; color: color-mix(in srgb, var(--accent) 70%, var(--deep)); }
+.cloud-small { margin: 2px 0 4px; font-size: 12px; opacity: .6; line-height: 1.45; }
+.cloud-email { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-st.synced { color: #3f8f62; }
+.cloud-st.error { color: var(--accent); }
