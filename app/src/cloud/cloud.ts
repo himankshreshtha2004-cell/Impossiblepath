@@ -1,7 +1,5 @@
-// Cloud save — shared by The Impossible Path and Pocket Universe.
-//
-// Uses one free Supabase project for both games, so one account (email + password) holds the
-// progress of both. Everything still saves in the browser first; the cloud is a copy that
+// Cloud save — the same module is used by The Impossible Path and Pocket Universe; each game
+// points at its own free Supabase project (set in cloud-config.js). Everything still saves in the browser first; the cloud is a copy that
 // follows you to other devices.
 //
 // Turn it on by filling in cloud-config.js (next to index.html):

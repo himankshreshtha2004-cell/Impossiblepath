@@ -53,7 +53,7 @@ export function CloudSheet() {
     <div className="sheet-wrap" onClick={close}>
       <div className="sheet cloudsave fade-in" onClick={(e) => e.stopPropagation()}>
         <h3>Cloud save</h3>
-        <p className="cloud-note">One account keeps your progress in <b>The Impossible Path</b> and <b>Pocket Universe</b>, on any device.</p>
+        <p className="cloud-note">Sign in to keep your progress in <b>The Impossible Path</b> on every device — phone, laptop or tablet.</p>
         {s.email ? (
           <>
             <div className="row"><span>Signed in as</span><b className="cloud-email">{s.email}</b></div>

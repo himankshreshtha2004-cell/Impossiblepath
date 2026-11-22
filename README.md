@@ -232,8 +232,7 @@ The tests check:
 The previous project (THE CURATOR) was archived separately before this rebuild.
 
 ## Cloud save
-Progress can follow the player to any device through one free Supabase project (shared with the other game,
-so one account holds both). Without it, everything still saves in the browser as before.
+Progress can follow the player to any device through this game's own free Supabase project. Without it, everything still saves in the browser as before.
 1. Create a free project at https://supabase.com.
 2. SQL Editor → New query → paste `cloud-setup.sql` → Run.
 3. Project Settings → API: put the Project URL and the anon / publishable key in `app/public/cloud-config.js`
