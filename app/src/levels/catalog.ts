@@ -74,6 +74,14 @@ export const LEVELS: LevelInfo[] = rows.map(([name, mechanic], i) => {
   return { id, name, mechanic: BUILT[id]?.mechanic ?? mechanic, world: Math.ceil(id / 10), tier: id <= 15 ? 'Easy' : id <= 35 ? 'Medium' : 'Hard', built: !!BUILT[id] }
 })
 
-export const levelInfo = (id: number) => LEVELS[id - 1]
+/** Learn to play: five tiny levels numbered 101–105, before Level 1. */
+export const TUTORIAL_IDS = [101, 102, 103, 104, 105]
+export const isTutorial = (id: number) => id > 100
+export const TUTORIAL_INFO: LevelInfo[] = TUTORIAL_IDS.map((id) => ({ id, name: BUILT[id].name, mechanic: ['Tap a tile to walk there', 'Turn the whole world so two paths meet', 'Turn a tower with its wheel', 'Slide a bridge into a gap', 'Ride a lift, then turn the world'][id - 101], world: 1, tier: 'Easy' as Tier, built: true }))
+export const levelInfo = (id: number): LevelInfo => (isTutorial(id) ? TUTORIAL_INFO[id - 101] : LEVELS[id - 1])
+/** What comes after a level: the tutorials lead into Level 1. */
+export const nextLevel = (id: number) => (id === 105 ? 1 : id + 1)
+/** Short label for cards: "I · 07" or "Learn · 2 of 5". */
+export const labelOf = (id: number) => (isTutorial(id) ? `Learn to play · ${id - 100} of 5` : `${ROMAN[levelInfo(id).world]} · ${String(id).padStart(2, '0')}`)
 export const worldOf = (id: number) => WORLDS[levelInfo(id).world - 1]
 export const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V']

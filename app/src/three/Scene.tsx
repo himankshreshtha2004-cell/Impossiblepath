@@ -7,7 +7,8 @@ import { World } from '../engine/world'
 import { worldTransform, structureMap } from '../engine/nav'
 import { add, lerp3, rightAt, rotV, scale, screenAt, upAt, viewAt } from '../engine/iso'
 import { BUILT } from '../levels'
-import { worldOf } from '../levels/catalog'
+import { worldOf, nextLevel } from '../levels/catalog'
+import { matchRoute } from '../engine/routes'
 import { getWorld, setWorld, useGame } from '../state/game'
 import { sfx } from '../audio/sound'
 import { PartMesh } from './Parts'
@@ -498,7 +499,7 @@ export function LevelView({ level }: { level: LevelDef }) {
       T.exitT += dt
       T.door = Math.min(1, T.door + dt / 0.8)
       if (T.exitT > 2.3) {
-        g.completeLevel(level.id)
+        g.completeLevel(level.id, matchRoute(level, world.trail))
         g.setPhase('outro')
       }
     }
@@ -506,7 +507,7 @@ export function LevelView({ level }: { level: LevelDef }) {
       T.outro = Math.min(1, T.outro + dt / (reduced ? 0.4 : 1.7))
       T.reveal = 1 - T.outro
       if (T.outro >= 1) {
-        const next = level.id + 1
+        const next = nextLevel(level.id)
         if (BUILT[next]) g.startLevel(next)
         else g.setPhase('end')
       }

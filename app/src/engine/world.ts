@@ -60,6 +60,8 @@ export class World {
   viewAnim: Anim | null = null
   flags = new Set<string>()
   visited = new Set<string>()
+  /** every tile stood on, in order (to tell which way through the player took) */
+  trail: string[] = []
   graph: Graph
   events: WorldEvents = {}
   // traveller
@@ -84,6 +86,7 @@ export class World {
     this.view = level.startView ?? 0
     this.node = level.start
     this.visited.add(this.node)
+    this.trail.push(this.node)
     this.graph = this.rebuild(true)
     this.pos = this.liveCenter(this.node)
   }
@@ -346,6 +349,7 @@ export class World {
 
   private arrive() {
     this.visited.add(this.node)
+    if (this.trail[this.trail.length - 1] !== this.node) this.trail.push(this.node)
     this.events.arrive?.(this.node)
     const tile = this.tileOf(this.node)
     if (tile.press && !this.flags.has(tile.press)) {

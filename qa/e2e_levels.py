@@ -80,7 +80,7 @@ async def main():
                     await pg.mouse.click(x, y)
                     await wait_for(f"({W}.node === '{h['tile']}' && !{W}.edge) || {G}.phase !== 'play'", 40)
                 await pg.wait_for_timeout(500)
-            ok = await wait_for(f"{G}.save.completed.includes({lid})", 30)
+            ok = await wait_for(f"{G}.save.completed.includes({lid}) || ({G}.save.tutorial || []).includes({lid})", 30)
             check(f'level {lid:02d}: played by the guide alone to the door', ok, steps)
         print('\n'.join(errs[:10]))
         await b.close()

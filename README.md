@@ -75,6 +75,49 @@ lifts and towers you call to you from elsewhere.
 | 49 | The Last Stairway | V The Infinite | 11 | world turn · tower + world · call a tower |
 | 50 | The Infinite Path | V The Infinite | 11 | world turn · tower + world · call a tower |
 
+## Learn to play
+
+Five tiny levels (101–105) come before Level 01. New players start there from **Begin**, and
+**Learn to play** on the title screen (or the ✦ row in Chapters) replays them at any time. Each
+teaches one idea, with the guide open from the start:
+
+| # | Tutorial | Teaches |
+|---|---|---|
+| 1 | Tap to Walk | tap a tile and the traveller walks there, stairs included |
+| 2 | Turn the World | two walkways that never touch meet on screen from another side |
+| 3 | Turn a Tower | drag a wheel to turn a walkway until it reaches you |
+| 4 | Slide a Bridge | push a coral bridge into a gap |
+| 5 | Rise and Turn | ride a lift up, then turn the world: everything together |
+
+## Many ways through
+
+Every level was designed as one chain of pieces, so it had exactly one route. `scripts/branches.ts`
+adds pale floating **stepping stones**. Each one sits where, from some side of the monument and
+with some towers turned, it lines up with two different pieces (or with another stone). So a
+level can be finished along several different routes. The guide always follows the standard
+route (`routes[0]`), and the other routes are there to be found.
+
+A "way" is the order in which you cross the pieces. Only genuinely different routes count: a
+route with a skippable detour (two of its pieces could meet directly) is the same way with a
+wander. Every way is checked on its own: the level is solved with only that way's pieces and
+joints present. The level keeps its stones only if all of the following hold:
+
+* it still can't be finished without moving anything;
+* no way is a cheap shortcut (each needs at least about half the standard route's moves);
+* the traveller, the next tile and the piece being moved are visible at every step of every way;
+* no state traps the traveller.
+
+In the game:
+
+* the level card says how many ways a level has;
+* finishing a level shows which way you took ("New way found · 3 of 6");
+* Chapters shows ways found per level;
+* progress (and cloud save) remembers the ways found.
+
+Run `npx vite-node scripts/branches.ts [from] [to]`, which writes `src/levels/extras.json`. Options
+are set through environment variables, for example `OPEN=1` (stones may join a walkway from an unused
+side) or `BUDGET=150` (seconds per level).
+
 ## Level designer
 
 `app/scripts/generate.ts` builds levels 03–50 (`npx vite-node scripts/generate.ts 3 50`, which

@@ -3,7 +3,8 @@ import { buildGraph, findPath } from './nav'
 import { sameScreen, screen } from './iso'
 import { deadEnds, solve, trivial } from './solve'
 import { World } from './world'
-import { BUILT } from '../levels'
+import { BASE, BUILT } from '../levels'
+import { solveRoute, matchRoute } from './routes'
 import type { LevelDef } from './types'
 
 /** Every combination of stops for the level's moving structures and the world view. */
@@ -34,8 +35,9 @@ describe('isometric projection', () => {
   })
 })
 
+// the hand-made design tests use the levels as designed (without the extra stepping stones)
 describe('level 01 — perspective joints at every world view and rotation state', () => {
-  const L = BUILT[1]
+  const L = BASE[1]
   it('start island ↔ tower walk joins only when the WORLD is turned to 90° (tower at 0°)', () => {
     expect(liveStates(L, ['S:s1', 'T:p2'])).toEqual(['@view=90 T=0'])
   })
@@ -69,7 +71,7 @@ describe('level 01 — perspective joints at every world view and rotation state
 })
 
 describe('level 02 — perspective joints at every world view and rotation state', () => {
-  const L = BUILT[2]
+  const L = BASE[2]
   it('first tower stairs ↔ round tower only at world 0° with the first tower at 180°', () => {
     expect(liveStates(L, ['T1:a', 'T2:s2'])).toEqual(['@view=0 T1=180'])
   })
@@ -80,7 +82,7 @@ describe('level 02 — perspective joints at every world view and rotation state
 
 describe('runtime world — level 01 played through the same API the mouse uses', () => {
   it('turn the world, walk on, ride the tower, turn the world back, cross, turn the tower back, cross, exit', () => {
-    const L = BUILT[1]
+    const L = BASE[1]
     let exited = false
     let connects = 0
     const w = new World(L, { exit: () => (exited = true), connect: () => connects++ })
@@ -117,10 +119,12 @@ function guideStep(L: LevelDef, w: World) {
 }
 
 describe('every built level', () => {
-  for (const L of Object.values(BUILT)) {
-    it(`level ${L.id}: solvable, not trivial, short, and needs both world turning and tower turning`, () => {
+  for (const L of Object.values(BUILT).filter((x) => x.id <= 50)) {
+    const B = BASE[L.id]
+    it(`level ${L.id}: its standard way is solvable, not trivial, short, and needs both world turning and tower turning`, () => {
       expect(trivial(L)).toBe(false)
-      const sol = solve(L)!
+      expect(trivial(B)).toBe(false)
+      const sol = solve(B)!
       expect(sol).not.toBeNull()
       const rotateIds = new Set(L.structures.filter((s) => s.motion?.kind === 'rotate').map((s) => s.id))
       const turns = sol.moves.filter((m) => m.startsWith('set ') && rotateIds.has(m.slice(4).split('=')[0]))
@@ -134,9 +138,10 @@ describe('every built level', () => {
     })
     it(`level ${L.id}: the step-by-step guide follows the solution to the door`, () => {
       expect(L.hints.length).toBeGreaterThanOrEqual(5)
+      // the guide follows the standard way; it is played in the full level (stones and all)
       const w = new World(L)
       const run = (sec: number) => { for (let i = 0; i < sec * 60; i++) w.update(1 / 60) }
-      const sol = solve(L)!
+      const sol = solve(B)!
       let last = guideStep(L, w)
       expect(last).toBe(0)
       for (const [i, m] of sol.moves.entries()) {
@@ -158,9 +163,78 @@ describe('every built level', () => {
       expect(w.done).toBe(true)
     })
     it(`level ${L.id}: no state can trap the traveller`, () => {
-      const r = deadEnds(L)
+      const r = deadEnds(L, 400000)
       expect(r.states).toBeGreaterThan(10)
       expect(r.dead).toEqual([])
+    })
+    it(`level ${L.id}: every listed way can be walked on its own, and is recognised when walked`, () => {
+      const routes = L.routes ?? []
+      expect(routes.length).toBeGreaterThanOrEqual(1)
+      expect(routes.length).toBeLessThanOrEqual(10)
+      expect(new Set(routes.map((r) => r.join('>'))).size).toBe(routes.length)
+      routes.forEach((r, i) => {
+        const moves = solveRoute(L, r)
+        expect(moves, `way ${i + 1}: ${r.join(' > ')}`).not.toBeNull()
+        // play it in the full level and check the game credits the right way
+        const w = new World(L)
+        const run = (sec: number) => { for (let k = 0; k < sec * 60; k++) w.update(1 / 60) }
+        const pm = new Set(r.map((p) => p.split('#')[0]))
+        for (const m of moves!) {
+          const [verb, arg] = m.split(' ')
+          if (verb === 'set') {
+            const [id, v] = arg.split('=')
+            if (id === '@view') w.setView(Number(v))
+            else w.setStop(id, Number(v))
+          } else {
+            // walk tile by tile along this way's own pieces, so the traveller can't wander off it
+            const g = w.graph
+            const sub = { ...g, adj: new Map([...g.adj].map(([k, es]) => [k, es.filter((e) => pm.has(e.b.split(':')[0]))])) }
+            const path = findPath(sub, w.node, arg)
+            expect(path).not.toBeNull()
+            for (const k of path!.slice(1)) {
+              expect(w.walkTo(k)).toBe(true)
+              run(6)
+            }
+          }
+        }
+        expect(w.done).toBe(true)
+        expect(matchRoute(L, w.trail)).toBe(i)
+      })
+    })
+  }
+  it('most levels have 5–10 ways through', () => {
+    const counts = Object.values(BUILT).filter((x) => x.id <= 50).map((x) => x.routes?.length ?? 1)
+    expect(counts.filter((n) => n >= 5).length).toBeGreaterThanOrEqual(45)
+  })
+})
+
+describe('learn to play', () => {
+  for (const id of [101, 102, 103, 104, 105]) {
+    const L = BUILT[id]
+    it(`tutorial ${id - 100} (${L.name}): solvable in a few moves, the guide leads to the door, no traps`, () => {
+      if (id > 101) expect(trivial(L)).toBe(false)
+      const sol = solve(L)!
+      expect(sol).not.toBeNull()
+      expect(sol.moves.length).toBeLessThanOrEqual(5)
+      const w = new World(L)
+      const run = (sec: number) => { for (let i = 0; i < sec * 60; i++) w.update(1 / 60) }
+      let last = guideStep(L, w)
+      for (const m of sol.moves) {
+        const [verb, arg] = m.split(' ')
+        if (verb === 'set') {
+          const [sid, v] = arg.split('=')
+          if (sid === '@view') w.setView(Number(v))
+          else w.setStop(sid, Number(v))
+        } else {
+          expect(w.walkTo(arg)).toBe(true)
+          run(12)
+        }
+        const now = guideStep(L, w)
+        expect(now).toBeGreaterThanOrEqual(last)
+        last = now
+      }
+      expect(w.done).toBe(true)
+      expect(deadEnds(L).dead).toEqual([])
     })
   }
 })
@@ -174,6 +248,10 @@ describe('cloud progress merge', () => {
   it('a newer New Game wins over older progress', () => {
     const m = mergeProgress({ unlocked: 1, completed: [], current: 1, resetAt: 200 }, { unlocked: 20, completed: [1, 2, 3], current: 20, resetAt: 100 })
     expect(m.unlocked).toBe(1); expect(m.completed).toEqual([])
+  })
+  it('keeps every way found and every tutorial done on either device', () => {
+    const m = mergeProgress({ unlocked: 3, completed: [1, 2], current: 3, tutorial: [101, 102], ways: { 3: [0, 2] } }, { unlocked: 3, completed: [1, 2], current: 3, tutorial: [103], ways: { 3: [1], 4: [0] } })
+    expect(m.tutorial).toEqual([101, 102, 103]); expect(m.ways).toEqual({ 3: [0, 1, 2], 4: [0] })
   })
   it('works with no cloud copy yet', () => {
     const a = { unlocked: 4, completed: [1, 2, 3], current: 4 }

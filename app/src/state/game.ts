@@ -8,7 +8,7 @@ import { onCloudSession, pull, push } from '../cloud/cloud'
 
 export type Quality = 'low' | 'balanced' | 'high'
 export interface Settings { music: number; sfx: number; quality: Quality; reducedMotion: boolean }
-export interface Save { unlocked: number; completed: number[]; current: number; settings: Settings; /** when "New Game" last wiped progress — a newer reset on another device wins */ resetAt?: number }
+export interface Save { unlocked: number; completed: number[]; current: number; settings: Settings; /** Learn-to-play levels finished (101–105) */ tutorial?: number[]; /** per level, which of its ways (route indexes) have been walked */ ways?: Record<string, number[]>; /** when "New Game" last wiped progress — a newer reset on another device wins */ resetAt?: number }
 
 const KEY = 'impossible-path-save-v1'
 const DEFAULT: Save = { unlocked: 1, completed: [], current: 1, settings: { music: 0.6, sfx: 0.8, quality: 'balanced', reducedMotion: false } }
@@ -30,10 +30,10 @@ function persist(s: Save, toCloud = true) {
     /* private mode */
   }
   // progress (not the per-device settings) is copied to the cloud when the player is signed in
-  if (toCloud) push(CLOUD_APP, 'save', { unlocked: s.unlocked, completed: s.completed, current: s.current, resetAt: s.resetAt ?? 0 })
+  if (toCloud) push(CLOUD_APP, 'save', { unlocked: s.unlocked, completed: s.completed, current: s.current, resetAt: s.resetAt ?? 0, tutorial: s.tutorial ?? [], ways: s.ways ?? {} })
 }
 const CLOUD_APP = 'impossible-path'
-type Progress = Pick<Save, 'unlocked' | 'completed' | 'current'> & { resetAt?: number }
+type Progress = Pick<Save, 'unlocked' | 'completed' | 'current' | 'tutorial' | 'ways'> & { resetAt?: number }
 /** combine this device's progress with the cloud copy: nothing finished anywhere is lost */
 export function mergeProgress(a: Progress, b: Progress | null): Progress {
   if (!b) return a
@@ -42,7 +42,10 @@ export function mergeProgress(a: Progress, b: Progress | null): Progress {
   const completed = [...new Set([...(a.completed || []), ...(b.completed || [])])].filter((n) => n >= 1 && n <= 50).sort((x, y) => x - y)
   const unlocked = Math.min(50, Math.max(a.unlocked || 1, b.unlocked || 1))
   const pick = (b.completed?.length || 0) > (a.completed?.length || 0) ? b : a
-  return { unlocked, completed, current: Math.min(unlocked, pick.current || 1), resetAt: ra }
+  const tutorial = [...new Set([...(a.tutorial || []), ...(b.tutorial || [])])].sort((x, y) => x - y)
+  const ways: Record<string, number[]> = {}
+  for (const w of [a.ways || {}, b.ways || {}]) for (const [k, v] of Object.entries(w)) ways[k] = [...new Set([...(ways[k] || []), ...v])].sort((x, y) => x - y)
+  return { unlocked, completed, current: Math.min(unlocked, pick.current || 1), resetAt: ra, tutorial, ways }
 }
 
 export type Screen = 'title' | 'chapters' | 'play'
@@ -72,7 +75,9 @@ interface Game {
   startLevel: (id: number) => void
   restart: () => void
   setPhase: (p: Phase) => void
-  completeLevel: (id: number) => void
+  completeLevel: (id: number, way?: number) => void
+  /** The last level's way, shown briefly as the next level starts. */
+  wayNote: { id: number; way: number; found: number; total: number; fresh: boolean; at: number } | null
   setPaused: (p: boolean) => void
   openSettings: (o: boolean) => void
   updateSettings: (p: Partial<Settings>) => void
@@ -106,23 +111,34 @@ export const useGame = create<Game>((set, get) => {
     hintAt: 0,
     autoGuide: false,
     caption: 0,
+    wayNote: null,
     go: (screen) => set({ screen, paused: false, hint: null, guide: false, ...(screen === 'title' ? { runId: get().runId + 1, phase: 'play' as Phase } : {}) }),
     startLevel: (id) => {
       if (!BUILT[id]) return
-      const s = { ...get().save, current: id }
+      const s = id > 100 ? get().save : { ...get().save, current: id }
       persist(s)
       const quick = get().screen === 'title' && get().levelId === id
       set({ save: s, screen: 'play', levelId: id, runId: get().runId + 1, phase: 'intro', paused: false, hint: null, guide: false, quick })
     },
     restart: () => set({ runId: get().runId + 1, phase: 'intro', paused: false, hint: null, guide: false, quick: false }),
     setPhase: (phase) => set({ phase, ...(phase === 'play' ? { caption: get().caption + 1 } : {}) }),
-    completeLevel: (id) => {
+    completeLevel: (id, way = -1) => {
       const s = get().save
+      if (id > 100) {
+        const tutorial = [...new Set([...(s.tutorial ?? []), id])]
+        const ns: Save = { ...s, tutorial }
+        persist(ns)
+        set({ save: ns })
+        return
+      }
       const completed = s.completed.includes(id) ? s.completed : [...s.completed, id]
       const next = id + 1
-      const ns: Save = { ...s, completed, unlocked: Math.max(s.unlocked, Math.min(50, next)), current: BUILT[next] ? next : id }
+      const had = s.ways?.[id] ?? []
+      const ways = way >= 0 && !had.includes(way) ? { ...(s.ways ?? {}), [id]: [...had, way].sort((a, b) => a - b) } : s.ways
+      const ns: Save = { ...s, completed, ways, unlocked: Math.max(s.unlocked, Math.min(50, next)), current: BUILT[next] ? next : id }
       persist(ns)
-      set({ save: ns })
+      const total = BUILT[id].routes?.length ?? 1
+      set({ save: ns, wayNote: total > 1 && way >= 0 ? { id, way, found: (ns.ways?.[id] ?? []).length, total, fresh: !had.includes(way), at: Date.now() } : null })
     },
     setPaused: (paused) => set({ paused, settingsOpen: false }),
     openSettings: (settingsOpen) => set({ settingsOpen }),
@@ -144,13 +160,15 @@ export const useGame = create<Game>((set, get) => {
       const hints = w.level.hints
       let i = hints.findIndex((x) => !x.done || !x.done(ps))
       if (i < 0) i = hints.length - 1
-      const live = liveGuide(hints[i], w)
+      let live = liveGuide(hints[i], w)
+      // off the standard way (on a stepping stone): say so rather than pull the player back
+      if (w.node.startsWith('X') && !live.met) live = { line: 'You’re on a stepping stone — another way through. These steps follow the standard way; keep exploring if you like.' }
       const prev = get().live
       if (get().hint !== hints[i] || get().hintTotal !== hints.length || prev?.line !== live.line || prev?.worldDir !== live.worldDir)
         set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length, live })
     },
     newGame: () => {
-      const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1, resetAt: Date.now() }
+      const s: Save = { ...get().save, unlocked: 1, completed: [], current: 1, ways: {}, resetAt: Date.now() }
       persist(s)
       set({ save: s })
       get().startLevel(1)
@@ -165,7 +183,9 @@ onCloudSession(async () => {
   const local = useGame.getState().save
   const m = mergeProgress(local, remote ?? null)
   const ns: Save = { ...local, ...m }
-  const same = (x: Progress | undefined) => !!x && x.unlocked === m.unlocked && x.current === m.current && (x.resetAt ?? 0) === (m.resetAt ?? 0) && JSON.stringify([...(x.completed || [])].sort((p, q) => p - q)) === JSON.stringify(m.completed)
+  const same = (x: Progress | undefined) =>
+    !!x && x.unlocked === m.unlocked && x.current === m.current && (x.resetAt ?? 0) === (m.resetAt ?? 0) && JSON.stringify([...(x.completed || [])].sort((p, q) => p - q)) === JSON.stringify(m.completed) &&
+    JSON.stringify([...(x.tutorial || [])].sort((p, q) => p - q)) === JSON.stringify(m.tutorial) && JSON.stringify(Object.fromEntries(Object.entries(x.ways || {}).map(([k, v]) => [k, [...v].sort((p, q) => p - q)]).sort())) === JSON.stringify(Object.fromEntries(Object.entries(m.ways || {}).sort()))
   if (!same(local)) { persist(ns, false); useGame.setState({ save: ns }) }
-  if (!same(remote)) push(CLOUD_APP, 'save', { unlocked: m.unlocked, completed: m.completed, current: m.current, resetAt: m.resetAt ?? 0 })
+  if (!same(remote)) push(CLOUD_APP, 'save', { unlocked: m.unlocked, completed: m.completed, current: m.current, resetAt: m.resetAt ?? 0, tutorial: m.tutorial ?? [], ways: m.ways ?? {} })
 })

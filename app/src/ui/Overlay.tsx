@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { CloudSheet, cloudLine, openCloud, useCloud, useCloudUI } from './Cloud'
 import { cloudConfigured } from '../cloud/cloud'
 import { useGame, getWorld } from '../state/game'
-import { LEVELS, WORLDS, ROMAN, levelInfo, type LevelInfo } from '../levels/catalog'
+import { LEVELS, WORLDS, ROMAN, levelInfo, labelOf, isTutorial, TUTORIAL_INFO, type LevelInfo } from '../levels/catalog'
+import { BUILT } from '../levels'
 import { initAudio, sfx } from '../audio/sound'
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -10,6 +11,7 @@ const pad2 = (n: number) => String(n).padStart(2, '0')
 function Title() {
   const st = useGame()
   const hasProgress = st.save.completed.length > 0 || st.save.current > 1
+  const learned = (st.save.tutorial ?? []).length > 0
   const begin = (fn: () => void) => () => {
     initAudio()
     sfx.ui()
@@ -23,7 +25,8 @@ function Title() {
       </div>
       <nav className="menu">
         {hasProgress && <button onClick={begin(() => st.startLevel(st.save.current))}>Continue</button>}
-        <button onClick={begin(() => (hasProgress ? st.newGame() : st.startLevel(1)))}>{hasProgress ? 'New Game' : 'Begin'}</button>
+        <button onClick={begin(() => (hasProgress ? st.newGame() : st.startLevel(learned ? 1 : 101)))}>{hasProgress ? 'New Game' : 'Begin'}</button>
+        <button onClick={begin(() => st.startLevel(101))}>Learn to play</button>
         <button onClick={begin(() => st.go('chapters'))}>Chapters</button>
         <button onClick={begin(() => st.openSettings(true))}>Settings</button>
         {cloudConfigured && <button onClick={() => openCloud()}>Cloud save</button>}
@@ -36,7 +39,7 @@ function Chapters() {
   const st = useGame()
   const [focus, setFocus] = useState<LevelInfo | null>(null)
   const open = (l: LevelInfo) => {
-    const unlocked = l.id <= st.save.unlocked || st.save.completed.includes(l.id)
+    const unlocked = isTutorial(l.id) || l.id <= st.save.unlocked || st.save.completed.includes(l.id)
     if (unlocked && l.built) {
       initAudio()
       sfx.ui()
@@ -51,6 +54,23 @@ function Chapters() {
         <span className="muted small">{st.save.completed.length} of 50 complete</span>
       </header>
       <div className="worlds">
+        <section className="world learn" style={{ ['--w-sky' as any]: WORLDS[0].palette.sky, ['--w-accent' as any]: WORLDS[0].palette.cool, ['--w-stone' as any]: WORLDS[0].palette.stone, ['--w-cool' as any]: WORLDS[0].palette.cool }}>
+          <div className="world-head">
+            <span className="roman">✦</span>
+            <span className="wname">Learn to Play</span>
+          </div>
+          <div className="path">
+            {TUTORIAL_INFO.map((l, i) => {
+              const done = (st.save.tutorial ?? []).includes(l.id)
+              return (
+                <button key={l.id} className={'node open' + (done ? ' done' : '')} style={{ ['--i' as any]: i }} onClick={() => open(l)} onMouseEnter={() => setFocus(l)} title={l.name}>
+                  <span className="diamond" />
+                  <span className="num">{i + 1}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
         {WORLDS.map((w) => (
           <section key={w.id} className="world" style={{ ['--w-sky' as any]: w.palette.sky, ['--w-accent' as any]: w.palette.accent, ['--w-stone' as any]: w.palette.stone, ['--w-cool' as any]: w.palette.cool }}>
             <div className="world-head">
@@ -66,6 +86,7 @@ function Chapters() {
                   <button key={l.id} className={cls} style={{ ['--i' as any]: i }} onClick={() => open(l)} onMouseEnter={() => setFocus(l)} title={l.name}>
                     <span className="diamond" />
                     <span className="num">{pad2(l.id)}</span>
+                    {done && (BUILT[l.id]?.routes?.length ?? 1) > 1 && <span className="ways">{(st.save.ways?.[l.id] ?? []).length}/{BUILT[l.id].routes!.length}</span>}
                   </button>
                 )
               })}
@@ -76,13 +97,18 @@ function Chapters() {
       <footer className="focus">
         {focus ? (
           <>
-            <span className="num">{pad2(focus.id)}</span>
+            <span className="num">{isTutorial(focus.id) ? focus.id - 100 : pad2(focus.id)}</span>
             <span className="fname">{focus.name}</span>
             <span className="muted">{focus.mechanic}</span>
-            <span className="tier">{WORLDS[focus.world - 1].name}</span>
+            <span className="tier">{isTutorial(focus.id) ? 'Learn to play' : WORLDS[focus.world - 1].name}</span>
             <span className="muted small">
-              {!focus.built ? 'Being built' : focus.id <= st.save.unlocked || st.save.completed.includes(focus.id) ? (st.save.completed.includes(focus.id) ? 'Complete · replay' : 'Open') : 'Locked'}
+              {isTutorial(focus.id)
+                ? (st.save.tutorial ?? []).includes(focus.id) ? 'Done · replay' : 'Open'
+                : !focus.built ? 'Being built' : focus.id <= st.save.unlocked || st.save.completed.includes(focus.id) ? (st.save.completed.includes(focus.id) ? 'Complete · replay' : 'Open') : 'Locked'}
             </span>
+            {!isTutorial(focus.id) && (BUILT[focus.id]?.routes?.length ?? 1) > 1 && (
+              <span className="muted small">{(st.save.ways?.[focus.id] ?? []).length} of {BUILT[focus.id].routes!.length} ways found</span>
+            )}
           </>
         ) : (
           <span className="muted">Every level moves from discovery to alignment to a combined puzzle · the worlds grow deeper</span>
@@ -141,7 +167,7 @@ function Pause() {
   return (
     <div className="sheet-wrap">
       <div className="sheet pause fade-in">
-        <div className="eyebrow">{ROMAN[levelInfo(st.levelId).world]} · {pad2(st.levelId)}</div>
+        <div className="eyebrow">{labelOf(st.levelId)}</div>
         <h3>{levelInfo(st.levelId).name}</h3>
         <button onClick={() => st.setPaused(false)}>Resume</button>
         <button onClick={() => st.restart()}>Restart level</button>
@@ -157,6 +183,8 @@ function Hud() {
   const st = useGame()
   const [card, setCard] = useState(false)
   const info = levelInfo(st.levelId)
+  const totalWays = BUILT[st.levelId]?.routes?.length ?? 1
+  const foundWays = (st.save.ways?.[st.levelId] ?? []).length
   useEffect(() => {
     if (st.phase !== 'play' || !st.caption) return
     setCard(true)
@@ -174,11 +202,12 @@ function Hud() {
   useEffect(() => {
     if (st.phase !== 'play') return
     const g = useGame.getState()
-    if (g.save.completed.includes(g.levelId) || g.guide) return
+    const learn = isTutorial(g.levelId)
+    if ((!learn && g.save.completed.includes(g.levelId)) || g.guide) return
     const t = setTimeout(() => {
       const n = useGame.getState()
       if (n.phase === 'play' && !n.guide && !n.paused) n.showHint(false)
-    }, 2600)
+    }, learn ? 900 : 2600)
     return () => clearTimeout(t)
   }, [st.phase, st.levelId, st.runId])
   // if nothing has changed for a while, offer the guide by itself (once per attempt)
@@ -223,9 +252,11 @@ function Hud() {
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden><path d="M17 7.5A7 7 0 1 0 19 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M20.5 5.5 17 7.5 17.8 3.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       <div className={'level-card' + (card && !st.guide ? ' show' : '')}>
-        <div className="eyebrow">{ROMAN[info.world]} · {pad2(info.id)}</div>
+        <div className="eyebrow">{labelOf(info.id)}</div>
         <div className="lname">{info.name}</div>
+        {totalWays > 1 && <div className="lways">{foundWays ? `${foundWays} of ${totalWays} ways found` : `${totalWays} ways to the door`}</div>}
       </div>
+      <WayNote />
       <div className={'guide' + (st.guide && st.hint ? ' show' : '')} role="status" aria-live="polite">
         <div className="eyebrow">
           {st.autoGuide ? 'A little help · ' : ''}Step {st.hintStep} of {st.hintTotal}
@@ -241,6 +272,29 @@ function Hud() {
       </div>
       {st.phase === 'end' && <EndCard />}
     </>
+  )
+}
+
+function WayNote() {
+  const note = useGame((s) => s.wayNote)
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    if (!note) return
+    setShow(true)
+    const t = setTimeout(() => setShow(false), 5200)
+    return () => clearTimeout(t)
+  }, [note?.at])
+  if (!note) return null
+  const left = note.total - note.found
+  return (
+    <div className={'way-note' + (show ? ' show' : '')} role="status">
+      <div className="eyebrow">{pad2(note.id)} · {levelInfo(note.id).name}</div>
+      <div className="wn-main">{note.fresh ? `New way found · ${note.found} of ${note.total}` : `Way ${note.way + 1} again · ${note.found} of ${note.total} found`}</div>
+      <div className="wn-dots">
+        {Array.from({ length: note.total }, (_, i) => <i key={i} className={(useGame.getState().save.ways?.[note.id] ?? []).includes(i) ? 'on' : ''} />)}
+      </div>
+      {left > 0 && <div className="wn-sub">{left === 1 ? 'One more way to find' : `${left} more ways to find`} — replay it from Chapters.</div>}
+    </div>
   )
 }
 

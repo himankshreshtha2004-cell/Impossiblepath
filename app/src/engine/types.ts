@@ -117,6 +117,8 @@ export interface LevelDef {
   mechanic?: string
   /** Optional framing tweaks. */
   frame?: { pad?: number; shiftY?: number; zoom?: number }
+  /** Known ways through (structure ids from start to door); [0] is the standard way the guide follows. */
+  routes?: string[][]
   /** Decorative clouds etc. */
   mood?: { clouds?: number; water?: number }
 }
