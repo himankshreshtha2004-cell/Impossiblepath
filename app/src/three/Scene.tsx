@@ -182,6 +182,29 @@ export function LevelView({ level }: { level: LevelDef }) {
     U.uReveal.value = tl.current.reveal
     ;(window as any).__ip = {
       world, frame, camera, U, tl,
+      /** test hook: which movable piece a press at these screen coordinates would grab (same rule as a real press) */
+      ownerAt: (x: number, y: number) => {
+        raycaster.setFromCamera(ndc(x, y), camera)
+        const hits = raycaster.intersectObjects(archMeshes(), false)
+        const h = hits[0]
+        let id = h ? movableOf(h.object) : null
+        if (h && !id) {
+          const behind = hits.find((q) => q.distance < hits[0].distance + 0.9 && movableOf(q.object))
+          if (behind) id = movableOf(behind.object)
+        }
+        return id
+      },
+      /** test hook: which tile a tap at these screen coordinates would choose */
+      pickAt: (x: number, y: number) => pick(x, y),
+      /** test hook: the first surfaces under these screen coordinates, and the piece each belongs to */
+      hitsAt: (x: number, y: number) => {
+        raycaster.setFromCamera(ndc(x, y), camera)
+        return raycaster.intersectObjects(archMeshes(), false).slice(0, 3).map((h) => {
+          let o: THREE.Object3D | null = h.object
+          while (o && !o.userData.struct) o = o.parent
+          return { piece: o?.userData.struct ?? null, point: h.point.toArray().map((v) => Math.round(v * 100) / 100), up: (h.face?.normal.clone().transformDirection(h.object.matrixWorld).y ?? 0) > 0.7 }
+        })
+      },
       toScreen: (p: V3) => {
         const v = new THREE.Vector3(p[0], p[1], p[2]).project(camera)
         const r = gl.domElement.getBoundingClientRect()
@@ -308,7 +331,9 @@ export function LevelView({ level }: { level: LevelDef }) {
 
   useEffect(() => {
     const el = gl.domElement
-    let down: { x: number; y: number; id: string | null; center: V3 | null } | null = null
+    // `tile` is decided at the moment of the press, from what the player saw then: pressing a
+    // movable piece makes it react a little, which must not change which tile was tapped.
+    let down: { x: number; y: number; id: string | null; center: V3 | null; tile: string | null } | null = null
     // whole-world turning (drag on the sky or on fixed architecture)
     let spin: { x0: number; v0: number; samples: { t: number; v: number }[] } | null = null
     const playing = () => {
@@ -346,8 +371,9 @@ export function LevelView({ level }: { level: LevelDef }) {
       if (spin.samples.length > 12) spin.samples.shift()
     }
     const pd = (e: PointerEvent) => {
-      down = { x: e.clientX, y: e.clientY, id: null, center: null }
+      down = { x: e.clientX, y: e.clientY, id: null, center: null, tile: null }
       if (drag.current || spin || !playing()) return
+      down.tile = pick(e.clientX, e.clientY)
       // pressing on movable architecture: a drag turns/slides it, a tap still walks.
       // Be forgiving: a movable piece just behind a slim post or arch still counts.
       raycaster.setFromCamera(ndc(e.clientX, e.clientY), camera)
@@ -403,10 +429,11 @@ export function LevelView({ level }: { level: LevelDef }) {
       const g = useGame.getState()
       if (!down || drag.current || spin || !playing()) return (down = null)
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return (down = null)
+      const k = down.tile
       down = null
-      const k = pick(e.clientX, e.clientY)
       if (!k) return
       const ok = world.walkTo(k)
+
       tap.current = { key: k, kind: ok ? 'go' : 'no', born: performance.now() }
     }
     const key = (e: KeyboardEvent) => {
@@ -432,37 +459,51 @@ export function LevelView({ level }: { level: LevelDef }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world])
 
-  /** Which tile did the player tap? The front-most visible surface decides; else the nearest tile on screen. */
+  /**
+   * Which tile did the player tap? Only a walkable surface the player can actually SEE counts:
+   * the front-most surface under the finger must be that tile's own top (or its stairs). A tap
+   * that lands on a roof, wall or anything else in front picks nothing — a tile hidden behind
+   * a building is never chosen. A tap on empty sky just beside a tile's edge picks that tile, but
+   * only if nothing stands in front of it.
+   */
+  const tileAt = (P: THREE.Vector3, up: boolean): string | null => {
+    for (const nd of world.graph.nodes.values()) {
+      const c = world.liveCenter(nd.key)
+      if (Math.abs(P.x - c[0]) >= 0.49 || Math.abs(P.z - c[2]) >= 0.49) continue
+      if (nd.tile.stair) {
+        if (P.y > c[1] - 0.62 && P.y < c[1] + 0.62) return nd.key
+      } else if (up && Math.abs(P.y - c[1]) < 0.08) return nd.key
+    }
+    return null
+  }
   const pick = (x: number, y: number): string | null => {
     raycaster.setFromCamera(ndc(x, y), camera)
-    const meshes: THREE.Object3D[] = []
-    scene.traverse((o) => o.userData.arch && (o as THREE.Mesh).isMesh && meshes.push(o))
+    const meshes = archMeshes()
     const hit = raycaster.intersectObjects(meshes, false)[0]
-    const nodes = [...world.graph.nodes.values()]
     if (hit && hit.face) {
-      const P = hit.point
       const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
-      const up = n.y > 0.7
-      for (const nd of nodes) {
-        const c = world.liveCenter(nd.key)
-        const inCell = Math.abs(P.x - c[0]) < 0.49 && Math.abs(P.z - c[2]) < 0.49
-        if (!inCell) continue
-        if (nd.tile.stair) {
-          // anywhere on the flight (treads or risers) between its two ends
-          if (P.y > c[1] - 0.62 && P.y < c[1] + 0.62) return nd.key
-        } else if (up && Math.abs(P.y - c[1]) < 0.08) return nd.key
-      }
+      return tileAt(hit.point, n.y > 0.7)
     }
-    // fallback: nearest tile centre on screen
+    // nothing under the finger: the nearest tile edge within a small reach, if it is in plain view
     const ray = raycaster.ray
     const o: V3 = [ray.origin.x, ray.origin.y, ray.origin.z]
     const [sx, sy] = screenAt(o, world.view)
     let best: string | null = null
-    let bd = 0.5
-    for (const n of nodes) {
-      const [cx, cy] = screenAt(world.liveCenter(n.key), world.view)
+    let bd = 0.42
+    for (const n of world.graph.nodes.values()) {
+      const c = world.liveCenter(n.key)
+      const [cx, cy] = screenAt(c, world.view)
       const d = Math.hypot(cx - sx, cy - sy)
-      if (d < bd) (bd = d), (best = n.key)
+      if (d >= bd) continue
+      // is this tile's top the first thing seen at its own centre?
+      const v = new THREE.Vector3(c[0], c[1] + (n.tile.stair ? 0 : 0.001), c[2]).project(camera)
+      raycaster.setFromCamera(new THREE.Vector2(v.x, v.y), camera)
+      const h = raycaster.intersectObjects(meshes, false)[0]
+      if (!h || !h.face) continue
+      const nn = h.face.normal.clone().transformDirection(h.object.matrixWorld)
+      if (tileAt(h.point, nn.y > 0.7) !== n.key) continue
+      bd = d
+      best = n.key
     }
     return best
   }

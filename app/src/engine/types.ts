@@ -106,8 +106,6 @@ export interface LevelDef {
   world: number
   /** Traveller's starting tile (qualified `structure:tile`). */
   start: string
-  /** Authored perspective links: these pairs may connect when they line up on screen. */
-  links: [string, string][]
   structures: StructureDef[]
   hints: Hint[]
   /** World views the player may turn to (default all four) and the one the level opens at. */

@@ -1,10 +1,11 @@
 import type { LevelDef } from './types'
 import { buildGraph, reachable, structureMap } from './nav'
 
-// Exhaustive puzzle solver used by the test suite. A state is: the stop every player-driven
-// structure rests at, the set of pressed switches, and the tile the traveller stands on.
-// Moves: walk to any tile reachable in the current navigation graph, or turn/slide a
-// player-driven structure to another stop (the traveller rides along if standing on it).
+// Exhaustive puzzle solver used by the test suite and the level designer. A state is: the stop
+// every player-driven piece rests at, the set of pressed switches, and the tile the traveller
+// stands on. Moves: walk to any tile reachable in the current navigation graph, or turn/slide a
+// player-driven piece to another stop (the traveller rides along if standing on it). The world
+// view is not part of the state: turning the world only moves the camera.
 
 export interface Solution { moves: string[]; states: number }
 
@@ -17,14 +18,11 @@ function flagValues(level: LevelDef, flags: Set<string>, values: Record<string, 
   return v
 }
 
-const VIEW_ID = '@view'
-/** Player-driven "dimensions" of the puzzle: every handle/grip structure plus the world view. */
-function drivenOf(level: LevelDef) {
-  const ds = level.structures.filter((s) => s.motion && s.motion.driver.kind !== 'flag').map((s) => ({ id: s.id, stops: s.motion!.stops, start: s.motion!.start }))
-  ds.push({ id: VIEW_ID, stops: level.views ?? [0, 90, 180, 270], start: level.startView ?? 0 })
-  return ds
+/** Player-driven "dimensions" of the puzzle: every piece with a wheel or grip. */
+export function drivenOf(level: LevelDef) {
+  return level.structures.filter((s) => s.motion && s.motion.driver.kind !== 'flag').map((s) => ({ id: s.id, stops: s.motion!.stops, start: s.motion!.start }))
 }
-const graphFor = (level: LevelDef, flags: Set<string>, vals: Record<string, number>) => buildGraph(level, flagValues(level, flags, vals), () => true, vals[VIEW_ID] ?? 0)
+const graphFor = (level: LevelDef, flags: Set<string>, vals: Record<string, number>) => buildGraph(level, flagValues(level, flags, vals))
 
 export function solve(level: LevelDef, limit = 200000): Solution | null {
   const map = structureMap(level)
@@ -72,7 +70,7 @@ export function solve(level: LevelDef, limit = 200000): Solution | null {
 /** True if the exit can be reached without touching any mechanism (i.e. the level is trivial). */
 export function trivial(level: LevelDef) {
   const values = flagValues(level, new Set(), Object.fromEntries(level.structures.filter((s) => s.motion).map((s) => [s.id, s.motion!.start])))
-  const g = buildGraph(level, values, () => true, level.startView ?? 0)
+  const g = buildGraph(level, values)
   const map = structureMap(level)
   return [...reachable(g, level.start)].some((k) => {
     const [s, t] = k.split(':')

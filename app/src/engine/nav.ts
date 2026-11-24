@@ -1,5 +1,5 @@
 import { DIRV, type Dir, type LevelDef, type StructureDef, type TileDef, type V3 } from './types'
-import { add, same3, sameScreenAt, scale, sub } from './iso'
+import { add, same3, scale } from './iso'
 
 // ---------------------------------------------------------------------------------------------
 // Affine transforms (rotation about y + translation) for structures, with parent chaining.
@@ -79,7 +79,7 @@ export function tileCPsLocal(t: TileDef): CP[] {
 export const key = (s: string, t: string) => `${s}:${t}`
 
 export interface NavNode { key: string; struct: string; tile: TileDef; center: V3; cps: CP[] }
-export interface Edge { a: string; b: string; ca: number; cb: number; kind: 'real' | 'illusion' }
+export interface Edge { a: string; b: string; ca: number; cb: number }
 export interface Graph { nodes: Map<string, NavNode>; adj: Map<string, Edge[]>; edges: Edge[] }
 
 const round = (v: V3): V3 => v.map((x) => Math.round(x * 1e6) / 1e6) as V3
@@ -104,54 +104,58 @@ export function worldNodes(level: LevelDef, values: Record<string, number>, incl
   return nodes
 }
 
-const opposite = (a: V3, b: V3) => same3(a, scale(b, -1), 1e-3)
+// ---------------------------------------------------------------------------------------------
+// THE movement rule. Every walkable connection in the game goes through jointOK; there is no
+// other way for two tiles to connect.
+
+/** How close two edge points must be (world units) to count as the same point. */
+export const JOINT_EPS = 1e-3
 
 /**
- * Builds the navigation graph.
- *  • Real edges: two connection points that coincide in 3D and face each other.
- *  • Perspective edges: an authored pair whose connection points coincide ON SCREEN (they are
- *    separated only along the view diagonal) and face each other. These exist only while the
- *    architecture holds them in alignment — rotate or slide a piece away and the edge vanishes.
+ * Two tile edges form a walkable joint only when they physically meet:
+ *  • the two edge points are the same point in 3D — same x, same z AND the same elevation
+ *    (screen overlap, or a gap along the view direction, is never enough);
+ *  • both edges face horizontally (stairs carry the height change inside their own tile);
+ *  • they face each other (opposite directions), so the walk is straight across the edge.
+ */
+export function jointOK(a: CP, b: CP): boolean {
+  if (Math.abs(a.dir[1]) > JOINT_EPS || Math.abs(b.dir[1]) > JOINT_EPS) return false
+  if (!same3(a.dir, scale(b.dir, -1), JOINT_EPS)) return false
+  return Math.abs(a.p[0] - b.p[0]) < JOINT_EPS && Math.abs(a.p[1] - b.p[1]) < JOINT_EPS && Math.abs(a.p[2] - b.p[2]) < JOINT_EPS
+}
+
+/**
+ * Builds the navigation graph from the actual tile geometry at the given piece positions.
+ * A piece that is moving (being dragged, snapping, or animating) contributes no tiles at all, so a
+ * joint exists only while both pieces are at rest in a matching position, and it disappears the
+ * moment either starts to move. The world view (camera) has no effect on connections.
  */
 export function buildGraph(
   level: LevelDef,
   values: Record<string, number>,
   settled: (id: string) => boolean = () => true,
-  /** Snapped world view in degrees, or null while the world is turning (no perspective joints). */
-  view: number | null = 0,
 ): Graph {
   const nodes = worldNodes(level, values, settled)
   const adj = new Map<string, Edge[]>()
   const edges: Edge[] = []
   for (const k of nodes.keys()) adj.set(k, [])
-  const push = (e: Edge) => {
-    edges.push(e)
-    adj.get(e.a)!.push(e)
-    adj.get(e.b)!.push({ a: e.b, b: e.a, ca: e.cb, cb: e.ca, kind: e.kind })
-  }
   const list = [...nodes.values()]
   for (let i = 0; i < list.length; i++)
     for (let j = i + 1; j < list.length; j++) {
       const A = list[i]
       const B = list[j]
+      // tiles more than one cell apart can't share an edge: skip the detailed test
+      if (Math.abs(A.center[0] - B.center[0]) > 1.6 || Math.abs(A.center[2] - B.center[2]) > 1.6 || Math.abs(A.center[1] - B.center[1]) > 1.6) continue
       A.cps.forEach((ca, ia) =>
         B.cps.forEach((cb, ib) => {
-          if (opposite(ca.dir, cb.dir) && same3(ca.p, cb.p)) push({ a: A.key, b: B.key, ca: ia, cb: ib, kind: 'real' })
+          if (!jointOK(ca, cb)) return
+          const e: Edge = { a: A.key, b: B.key, ca: ia, cb: ib }
+          edges.push(e)
+          adj.get(A.key)!.push(e)
+          adj.get(B.key)!.push({ a: B.key, b: A.key, ca: ib, cb: ia })
         }),
       )
     }
-  if (view !== null) for (const [ka, kb] of level.links) {
-    const A = nodes.get(ka)
-    const B = nodes.get(kb)
-    if (!A || !B) continue
-    A.cps.forEach((ca, ia) =>
-      B.cps.forEach((cb, ib) => {
-        if (!opposite(ca.dir, cb.dir) || same3(ca.p, cb.p)) return
-        // Horizontal directions only — the walk must read as one continuous path on screen.
-        if (sameScreenAt(ca.p, cb.p, view)) push({ a: A.key, b: B.key, ca: ia, cb: ib, kind: 'illusion' })
-      }),
-    )
-  }
   return { nodes, adj, edges }
 }
 
@@ -187,8 +191,3 @@ export function reachable(g: Graph, from: string): Set<string> {
 }
 
 export const edgeBetween = (g: Graph, a: string, b: string) => g.adj.get(a)?.find((e) => e.b === b)
-
-/** Offset (along the view diagonal) that the traveller jumps across a perspective edge. */
-export function illusionShift(g: Graph, e: Edge): V3 {
-  return sub(g.nodes.get(e.b)!.cps[e.cb].p, g.nodes.get(e.a)!.cps[e.ca].p)
-}

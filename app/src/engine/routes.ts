@@ -14,7 +14,7 @@ export function pieceOf(level: LevelDef): Map<string, string> {
   if (hit) return hit
   const vals: Record<string, number> = {}
   for (const s of level.structures) if (s.motion) vals[s.id] = s.motion.start
-  const g = buildGraph(level, vals, () => true, null)
+  const g = buildGraph(level, vals)
   const parent = new Map<string, string>()
   const find = (k: string): string => {
     const p = parent.get(k) ?? k
@@ -24,7 +24,7 @@ export function pieceOf(level: LevelDef): Map<string, string> {
     return r
   }
   for (const k of g.nodes.keys()) parent.set(k, k)
-  for (const e of g.edges) if (e.kind === 'real' && e.a.split(':')[0] === e.b.split(':')[0]) parent.set(find(e.a), find(e.b))
+  for (const e of g.edges) if (e.a.split(':')[0] === e.b.split(':')[0]) parent.set(find(e.a), find(e.b))
   const out = new Map<string, string>()
   for (const s of level.structures) {
     const roots = [...new Set(s.tiles.map((t) => find(`${s.id}:${t.id}`)))]
@@ -83,18 +83,16 @@ export function crossed(F: LevelDef, moves: string[]): string[] | null {
   const vals: Record<string, number> = {}
   for (const s of F.structures) if (s.motion) vals[s.id] = s.motion.start
   const flags = new Set<string>()
-  let view = F.startView ?? 0
   let node = F.start
   const map = structureMap(F)
   for (const m of moves) {
     const [verb, arg] = m.split(' ')
     if (verb === 'set') {
       const [id, v] = arg.split('=')
-      if (id === '@view') view = Number(v)
-      else vals[id] = Number(v)
+      if (id !== '@view') vals[id] = Number(v)
       continue
     }
-    const g = buildGraph(F, flagValues(F, flags, vals), () => true, view)
+    const g = buildGraph(F, flagValues(F, flags, vals))
     const way = findPath(g, node, arg)
     if (!way) return null
     for (const k of way) {
@@ -109,19 +107,13 @@ export function crossed(F: LevelDef, moves: string[]): string[] | null {
 }
 
 /**
- * Can the level be finished along exactly this way? Solves it with only the way's pieces walkable
- * and only the joints between neighbours on the way linked. Returns the moves, or null.
+ * Can the level be finished along exactly this way? Solves it with only the way's pieces present
+ * (a way is listed only if no two of its pieces can meet except neighbours on it). Returns the
+ * moves, or null.
  */
 export function solveRoute(L: LevelDef, path: string[], limit = 60000): string[] | null {
-  const pm = pieceOf(L)
   const keep = new Set(path.map((p) => p.split('#')[0]))
-  const next = new Map(path.map((p, i) => [p, path[i + 1]]))
-  const consecutive = (a: string, b: string) => next.get(a) === b || next.get(b) === a
-  const F: LevelDef = {
-    ...L,
-    structures: L.structures.filter((s) => keep.has(s.id) || (s.tiles.length === 0 && !s.motion)),
-    links: L.links.filter(([a, b]) => consecutive(pm.get(a)!, pm.get(b)!)),
-  }
+  const F: LevelDef = { ...L, structures: L.structures.filter((s) => keep.has(s.id) || (s.tiles.length === 0 && !s.motion)) }
   const sol = solve(F, limit)
   if (!sol) return null
   const seq = crossed(F, sol.moves)

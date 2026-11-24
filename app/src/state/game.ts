@@ -3,21 +3,26 @@ import type { Hint } from '../engine/types'
 import { liveGuide, type LiveGuide } from '../ui/guide'
 import type { World } from '../engine/world'
 import { BUILT } from '../levels'
+import { pieceOf } from '../engine/routes'
 import { setVolumes } from '../audio/sound'
 import { onCloudSession, pull, push } from '../cloud/cloud'
 
 export type Quality = 'low' | 'balanced' | 'high'
 export interface Settings { music: number; sfx: number; quality: Quality; reducedMotion: boolean }
-export interface Save { unlocked: number; completed: number[]; current: number; settings: Settings; /** Learn-to-play levels finished (101–105) */ tutorial?: number[]; /** per level, which of its ways (route indexes) have been walked */ ways?: Record<string, number[]>; /** when "New Game" last wiped progress — a newer reset on another device wins */ resetAt?: number }
+export interface Save { layout?: number; unlocked: number; completed: number[]; current: number; settings: Settings; /** Learn-to-play levels finished (101–105) */ tutorial?: number[]; /** per level, which of its ways (route indexes) have been walked */ ways?: Record<string, number[]>; /** when "New Game" last wiped progress — a newer reset on another device wins */ resetAt?: number }
 
 const KEY = 'impossible-path-save-v1'
-const DEFAULT: Save = { unlocked: 1, completed: [], current: 1, settings: { music: 0.6, sfx: 0.8, quality: 'balanced', reducedMotion: false } }
+/** Version of the level layouts; bump when levels are rebuilt so stale 'ways found' are dropped. */
+const LAYOUT = 2
+const DEFAULT: Save = { layout: LAYOUT, unlocked: 1, completed: [], current: 1, settings: { music: 0.6, sfx: 0.8, quality: 'balanced', reducedMotion: false } }
 
 function load(): Save {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return structuredClone(DEFAULT)
     const s = JSON.parse(raw)
+    // levels were rebuilt (physical joints only): ways recorded for the old layouts no longer apply
+    if ((s.layout ?? 1) < LAYOUT) (s.ways = {}), (s.layout = LAYOUT)
     return { ...structuredClone(DEFAULT), ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) } }
   } catch {
     return structuredClone(DEFAULT)
@@ -30,7 +35,7 @@ function persist(s: Save, toCloud = true) {
     /* private mode */
   }
   // progress (not the per-device settings) is copied to the cloud when the player is signed in
-  if (toCloud) push(CLOUD_APP, 'save', { unlocked: s.unlocked, completed: s.completed, current: s.current, resetAt: s.resetAt ?? 0, tutorial: s.tutorial ?? [], ways: s.ways ?? {} })
+  if (toCloud) push(CLOUD_APP, 'save', { unlocked: s.unlocked, completed: s.completed, current: s.current, resetAt: s.resetAt ?? 0, tutorial: s.tutorial ?? [], ways: s.ways ?? {}, layout: LAYOUT })
 }
 const CLOUD_APP = 'impossible-path'
 type Progress = Pick<Save, 'unlocked' | 'completed' | 'current' | 'tutorial' | 'ways'> & { resetAt?: number }
@@ -161,8 +166,10 @@ export const useGame = create<Game>((set, get) => {
       let i = hints.findIndex((x) => !x.done || !x.done(ps))
       if (i < 0) i = hints.length - 1
       let live = liveGuide(hints[i], w)
-      // off the standard way (on a stepping stone): say so rather than pull the player back
-      if (w.node.startsWith('X') && !live.met) live = { line: 'You’re on a stepping stone — another way through. These steps follow the standard way; keep exploring if you like.' }
+      // off the standard way: say so rather than pull the player back
+      const std = w.level.routes?.[0]
+      const piece = pieceOf(w.level).get(w.node)
+      if (std && piece && !std.includes(piece) && !live.met) live = { line: 'You’ve taken another way through. These steps follow the standard way; carry on exploring if you like.' }
       const prev = get().live
       if (get().hint !== hints[i] || get().hintTotal !== hints.length || prev?.line !== live.line || prev?.worldDir !== live.worldDir)
         set({ hint: hints[i], hintStep: i + 1, hintTotal: hints.length, live })
@@ -179,7 +186,9 @@ export const useGame = create<Game>((set, get) => {
 // when the player is signed in (on load or after signing in), bring this device and the cloud in line
 onCloudSession(async () => {
   const rows = await pull(CLOUD_APP)
-  const remote = rows.find((r) => r.key === 'save' && !r.deleted)?.data as Progress | undefined
+  const raw = rows.find((r) => r.key === 'save' && !r.deleted)?.data as (Progress & { layout?: number }) | undefined
+  // ways saved for an older set of level layouts don't apply to the current levels
+  const remote = raw && (raw.layout ?? 1) < LAYOUT ? { ...raw, ways: {} } : raw
   const local = useGame.getState().save
   const m = mergeProgress(local, remote ?? null)
   const ns: Save = { ...local, ...m }
@@ -187,5 +196,5 @@ onCloudSession(async () => {
     !!x && x.unlocked === m.unlocked && x.current === m.current && (x.resetAt ?? 0) === (m.resetAt ?? 0) && JSON.stringify([...(x.completed || [])].sort((p, q) => p - q)) === JSON.stringify(m.completed) &&
     JSON.stringify([...(x.tutorial || [])].sort((p, q) => p - q)) === JSON.stringify(m.tutorial) && JSON.stringify(Object.fromEntries(Object.entries(x.ways || {}).map(([k, v]) => [k, [...v].sort((p, q) => p - q)]).sort())) === JSON.stringify(Object.fromEntries(Object.entries(m.ways || {}).sort()))
   if (!same(local)) { persist(ns, false); useGame.setState({ save: ns }) }
-  if (!same(remote)) push(CLOUD_APP, 'save', { unlocked: m.unlocked, completed: m.completed, current: m.current, resetAt: m.resetAt ?? 0, tutorial: m.tutorial ?? [], ways: m.ways ?? {} })
+  if (!same(remote)) push(CLOUD_APP, 'save', { unlocked: m.unlocked, completed: m.completed, current: m.current, resetAt: m.resetAt ?? 0, tutorial: m.tutorial ?? [], ways: m.ways ?? {}, layout: LAYOUT })
 })

@@ -4,10 +4,12 @@ import { BOTTOM, box, door, finial, roof, row, stairTile, stairs, tile, win } fr
 // LEARN TO PLAY — five tiny levels, one idea each, numbered 101–105.
 //
 //  101 Tap to Walk      tap a tile, the traveller walks there (stairs too)
-//  102 Turn the World   two walkways that never touch meet on screen from another side
-//  103 Turn a Tower     drag a wheel to turn a walkway until it meets you
+//  102 Turn the World   turn the whole world to see behind things (it never changes what connects)
+//  103 Turn a Tower     drag a wheel to turn a walkway until its end sits right against yours
 //  104 Slide a Bridge   push a coral bridge into a gap
-//  105 Rise and Turn    ride a lift up, then turn the world: everything together
+//  105 Rise and Turn    a lift must stop level with the next walk; then turn a tower to the door
+//
+// Every joint here is physical: two tiles connect only where their edges meet at the same height.
 
 const seen = (s: PuzzleState, id: string) => [...s.visited].some((k) => k.startsWith(id + ':'))
 const deg = (v: number) => ((Math.round(v) % 360) + 360) % 360
@@ -47,7 +49,6 @@ const t1: LevelDef = {
   name: 'Tap to Walk',
   world: 1,
   start: 'S:a',
-  links: [],
   structures: [
     {
       id: 'S',
@@ -74,29 +75,48 @@ const t1: LevelDef = {
 
 // ---------------------------------------------------------------------------------------------
 // 102 — Turn the World
-// From view 90 (looking down (1,1,−1)) the start walk's end (1.5,0,0) and the door walk's end
-// (3.5,2,−2) land on the same point of the screen, so the traveller can cross.
+// The path runs round behind a tall tower, out of sight from the starting side. Turning the world
+// shows it; nothing about the path changes.
 
 const t2: LevelDef = {
   id: 102,
   name: 'Turn the World',
   world: 1,
   start: 'S:a',
-  links: [['S:b', 'D:a']],
   structures: [
-    { id: 'S', origin: [0, 0, 0], tiles: [tile('a', 0, 0, 0, { sides: ['E'] }), tile('b', 1, 0, 0, { sides: ['W', 'E'] })], parts: [...walkParts(0, 1, 0, 0), ...startDecor(0, 0, 0), ...finial(-0.38, 0, 0.38)] },
     {
-      id: 'D',
+      id: 'S',
       origin: [0, 0, 0],
-      tiles: [tile('a', 4, 2, -2, { sides: ['W', 'E'] }), tile('d', 5, 2, -2, { sides: ['W'], exit: 'S' })],
-      parts: [...walkParts(4, 5, 2, -2, 'warm'), { kind: 'inlay', at: [5, 2, -2], size: 0.5, c: 'accent' }, ...doorWall(5, 2, -2, 'S')],
+      tiles: [
+        tile('a', 0, 0, 0, { sides: ['E'] }),
+        tile('b', 1, 0, 0, { sides: ['W', 'N'] }),
+        tile('c', 1, 0, -1, { sides: ['S', 'N'] }),
+        tile('d', 1, 0, -2, { sides: ['S', 'W'] }),
+        tile('e', 0, 0, -2, { sides: ['E'], exit: 'N' }),
+      ],
+      parts: [
+        ...walkParts(0, 1, 0, 0),
+        row('z', 1, -2, -1, 0, 'stone'),
+        row('x', -2, 0, 0, 0, 'warm'),
+        ...startDecor(0, 0, 0),
+        { kind: 'inlay', at: [0, 0, -2], size: 0.5, c: 'accent' },
+        ...doorWall(0, 0, -2, 'N'),
+        // the tall tower that hides the back of the path from the starting side
+        box([1.5, BOTTOM, -0.5], [2.5, 3.4, 0.5], 'warm'),
+        box([1.44, 3.4, -0.56], [2.56, 3.56, 0.56], 'stone'),
+        roof(2, 3.56, 0, 1.12, 1.0, 'accent'),
+        ...finial(2, 4.56, 0, 'cool'),
+        win([2.5, 2.4, 0], 'E', 0.14, 0.5),
+        win([2, 1.4, 0.5], 'S', 0.14, 0.5),
+        win([2, 2.6, 0.5], 'S', 0.14, 0.5),
+      ],
     },
   ],
   hints: [
-    { text: 'These two walkways don’t touch. Turn the whole world: tap ⟲ at the bottom left, or drag across the sky.', view: 90, done: (s) => s.view === 90 || seen(s, 'D') },
-    { text: 'From this side the two paths line up on screen, and here that means they join. Tap the door.', tile: 'D:d' },
+    { text: 'The path goes round behind the tall tower, where you can’t see it. Turn the whole world to look from another side: tap ⟳ at the bottom right, or drag across the sky.', view: 270, done: (s) => s.view === 270 || s.visited.has('S:e') },
+    { text: 'Now you can see the door. Turning the world only moves your view: it never changes where you can walk. Tap the door.', tile: 'S:e' },
   ],
-  frame: { zoom: 0.7 },
+  frame: { zoom: 0.62 },
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -129,7 +149,6 @@ const t3: LevelDef = {
   name: 'Turn a Tower',
   world: 1,
   start: 'S:a',
-  links: [],
   structures: [
     { id: 'S', origin: [0, 0, 0], tiles: [tile('a', -3, 0, 0, { sides: ['E'] }), tile('b', -2, 0, 0, { sides: ['W', 'E'] })], parts: [...walkParts(-3, -2, 0, 0), ...startDecor(-3, 0, 0)] },
     tower,
@@ -160,7 +179,6 @@ const t4: LevelDef = {
   name: 'Slide a Bridge',
   world: 1,
   start: 'S:a',
-  links: [],
   structures: [
     { id: 'S', origin: [0, 0, 0], tiles: [tile('a', 0, 0, 0, { sides: ['E'] }), tile('b', 1, 0, 0, { sides: ['W', 'E'] })], parts: [...walkParts(0, 1, 0, 0), ...startDecor(0, 0, 0)] },
     {
@@ -187,15 +205,22 @@ const t4: LevelDef = {
 
 // ---------------------------------------------------------------------------------------------
 // 105 — Rise and Turn
-// The lift carries you up to the high walk behind it. From view 270 (looking down (−1,1,1)) the
-// high walk's far end (2,2,−2.5) lines up with the start of the door's path (4,0,−4.5).
+// The lift must stop exactly level with the high walk behind it: one storey up it is still lower,
+// and you can't step across a height difference. Then a walkway tower turns until its end sits
+// against the high walk, and leads on to the door.
 
+const turner: StructureDef = {
+  ...tower,
+  id: 'T',
+  origin: [2, 2, -4],
+  motion: { kind: 'rotate', stops: [0, 90, 180, 270], start: 90, driver: { kind: 'wheel', at: [0, -1.9, 0], r: 0.98 } },
+  parts: tower.parts.map((p) => (p.kind === 'box' && p.from[1] === BOTTOM ? { ...p, from: [p.from[0], BOTTOM - 2, p.from[2]] as [number, number, number] } : p)),
+}
 const t5: LevelDef = {
   id: 105,
   name: 'Rise and Turn',
   world: 1,
   start: 'S:a',
-  links: [['U:b', 'D:a']],
   structures: [
     { id: 'S', origin: [0, 0, 0], tiles: [tile('a', 0, 0, 0, { sides: ['E'] }), tile('b', 1, 0, 0, { sides: ['W', 'E'] })], parts: [...walkParts(0, 1, 0, 0), ...startDecor(0, 0, 0)] },
     {
@@ -209,35 +234,30 @@ const t5: LevelDef = {
       id: 'shaft',
       origin: [0, 0, 0],
       tiles: [],
-      parts: [box([2.56, BOTTOM, 0.32], [2.68, 3.3, 0.44], 'cool'), box([2.56, BOTTOM, -0.44], [2.68, 3.3, -0.32], 'cool'), box([2.52, 3.3, -0.5], [2.72, 3.44, 0.5], 'cool')],
+      parts: [box([2.56, BOTTOM, -0.4], [2.68, 3.3, 0.4], 'cool'), box([2.52, 3.3, -0.5], [2.72, 3.44, 0.5], 'cool')],
     },
     {
       id: 'U',
       origin: [0, 0, 0],
       tiles: [tile('a', 2, 2, -1, { sides: ['S', 'N'] }), tile('b', 2, 2, -2, { sides: ['S', 'N'] })],
-      parts: [row('z', 2, -2, -1, 2, 'stone'), win([2.5, 1.1, -1.5], 'E', 0.14, 0.45), ...finial(1.62, 2, -2.38, 'cool')],
+      parts: [row('z', 2, -2, -1, 2, 'stone'), win([2.5, 1.1, -1.5], 'E', 0.14, 0.45), ...finial(1.62, 2, -1.62, 'cool')],
     },
+    turner,
     {
       id: 'D',
       origin: [0, 0, 0],
-      tiles: [tile('a', 4, 0, -5, { sides: ['S', 'N'] }), tile('d', 4, 0, -6, { sides: ['S'], exit: 'E' })],
-      parts: [
-        row('z', 4, -6, -5, 0, 'warm'),
-        box([3.38, BOTTOM, -6.62], [4.62, -1.4, -4.38], 'stone'),
-        win([4.5, -0.9, -5], 'E', 0.14, 0.4),
-        { kind: 'inlay', at: [4, 0, -6], size: 0.5, c: 'accent' },
-        ...doorWall(4, 0, -6, 'E'),
-      ],
+      tiles: [tile('d', 2, 2, -6, { sides: ['S'], exit: 'W' })],
+      parts: [row('z', 2, -6, -6, 2, 'warm'), win([2.5, 1.1, -6], 'E', 0.14, 0.45), { kind: 'inlay', at: [2, 2, -6], size: 0.5, c: 'accent' }, ...doorWall(2, 2, -6, 'W')],
     },
   ],
   hints: [
     { text: 'Step onto the lift (the coral square).', tile: 'L:m', done: (s) => seen(s, 'L') },
-    { text: 'Press on the lift and drag up to raise it two storeys. You ride along.', slide: { id: 'L', to: 2 }, target: 'L', done: (s) => s.values.L === 2 || seen(s, 'U') },
-    { text: 'Walk to the far end of the high walkway.', tile: 'U:b', done: (s) => s.visited.has('U:b') },
-    { text: 'Turn the world. From the new side the high walkway meets the door’s path.', view: 270, done: (s) => s.view === 270 || seen(s, 'D') },
-    { text: 'Tap the door. From here on, most levels have several ways to the door: the hint shows one, and pale floating stones line up from other sides to make more.', tile: 'D:d' },
+    { text: 'Raise the lift: press on it and drag up. One storey up it is still lower than the high walk, and you can’t step up a height difference. Keep going until the two are exactly level.', slide: { id: 'L', to: 2 }, target: 'L', done: (s) => s.values.L === 2 || seen(s, 'U') },
+    { text: 'Level now: walk across to the end of the high walk.', tile: 'U:b', done: (s) => s.visited.has('U:b') },
+    { text: 'Turn the tower with its wheel until the end of its walk sits right against yours, at the same height.', turn: { id: 'T', to: 0 }, target: 'T', done: (s) => deg(s.values.T) === 0 || deg(s.values.T) === 180 || seen(s, 'D') },
+    { text: 'Tap the door. From here on, levels have more than one way through: the hint shows one, and other walks, stairs, bridges and lifts lead there too.', tile: 'D:d' },
   ],
-  frame: { zoom: 0.7 },
+  frame: { zoom: 0.8 },
 }
 
 export const TUTORIALS: LevelDef[] = [t1, t2, t3, t4, t5]

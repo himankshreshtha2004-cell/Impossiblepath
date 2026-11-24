@@ -75,7 +75,6 @@ export class World {
   speed = 0
   leaving = -1 // ≥0 while walking through the exit door
   done = false
-  private illusionKeys = new Set<string>()
   private rideAng: [string, number] | null = null
 
   constructor(level: LevelDef, events: WorldEvents = {}) {
@@ -119,15 +118,16 @@ export class World {
     return this.level.views ?? VIEWS
   }
 
+  /**
+   * Recompute which tiles connect, from the pieces' actual positions. Called whenever a piece
+   * starts or stops moving. New joints between different pieces are announced (sound).
+   */
   rebuild(silent = false): Graph {
-    this.graph = buildGraph(this.level, this.values, this.isSettled, this.settledView())
-    const now = new Set<string>()
-    for (const e of this.graph.edges) if (e.kind === 'illusion') {
-      const k = [e.a, e.b].sort().join('|')
-      now.add(k)
-      if (!silent && !this.illusionKeys.has(k)) this.events.connect?.(e)
-    }
-    this.illusionKeys = now
+    const before = new Set(this.graph?.edges.map((e) => [e.a, e.b].sort().join('|')) ?? [])
+    this.graph = buildGraph(this.level, this.values, this.isSettled)
+    if (!silent)
+      for (const e of this.graph.edges)
+        if (e.a.split(':')[0] !== e.b.split(':')[0] && !before.has([e.a, e.b].sort().join('|'))) this.events.connect?.(e)
     return this.graph
   }
 
@@ -191,10 +191,9 @@ export class World {
 
   // ---- whole-world turning ------------------------------------------------------------------
 
-  /** The world can turn unless the traveller is mid-way across a perspective joint. */
+  /** Turning the world only moves the camera: it never changes which tiles connect. */
   canGrabView() {
-    if (this.done || this.leaving >= 0) return false
-    return !(this.edge && this.edge.kind === 'illusion')
+    return !(this.done || this.leaving >= 0)
   }
 
   grabView(): boolean {
@@ -202,11 +201,8 @@ export class World {
       this.events.refused?.('world')
       return false
     }
-    // finish the current step, forget the rest of the route (it may rely on this view)
-    this.path = []
     this.viewDragging = true
     this.viewAnim = null
-    this.rebuild()
     return true
   }
 
@@ -233,7 +229,6 @@ export class World {
     if (dist < 1e-6) {
       this.view = best
       this.events.viewSnap?.(normDeg(best))
-      this.rebuild()
       return
     }
     this.viewAnim = { from: this.view, to: best, t: 0, dur: 0.35 + 0.35 * Math.min(1.5, dist), kind: 'snap' }
@@ -242,10 +237,8 @@ export class World {
   /** Turn the world a quarter turn left (−1) or right (+1), e.g. from the keyboard. */
   turnView(dir: 1 | -1): boolean {
     if (!this.canGrabView() || this.viewDragging) return false
-    this.path = []
     const base = this.viewAnim ? this.viewAnim.to : Math.round(this.view / 90) * 90
     this.viewAnim = { from: this.view, to: base + dir * 90, t: 0, dur: 0.75, kind: 'snap' }
-    this.rebuild()
     return true
   }
 
@@ -256,7 +249,6 @@ export class World {
     if (Math.abs(from - to) < 0.5) return
     this.view = from
     this.viewAnim = { from, to, t: 0, dur: 0.9, kind: 'snap' }
-    this.rebuild()
   }
 
   /** Puzzle-level jump of the world view (tests / debug). */
@@ -264,7 +256,6 @@ export class World {
     this.view = deg
     this.viewAnim = null
     this.viewDragging = false
-    this.rebuild()
   }
 
   /** Puzzle-level jump used by tests and the debug solver. */
@@ -391,7 +382,6 @@ export class World {
       if (a.t >= 1) {
         this.view = a.to
         this.viewAnim = null
-        changed = true
         this.events.viewSnap?.(normDeg(a.to))
       }
     }
@@ -432,7 +422,7 @@ export class World {
     }
     const mv = sub(this.pos, before)
     const h = Math.hypot(mv[0], mv[2])
-    // Facing only follows deliberate walking, not riding a turning bridge or crossing an illusion jump.
+    // Facing only follows deliberate walking, not riding a turning piece.
     if ((this.edge || this.leaving >= 0) && h > 1e-5 && h < 0.2) this.facing = Math.atan2(mv[0], mv[2])
     this.speed = this.edge || (this.leaving >= 0 && this.leaving < 0.9) ? 1 : 0
   }
